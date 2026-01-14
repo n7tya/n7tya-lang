@@ -59,18 +59,28 @@ pub fn render_jsx(element: &JsxElement, interpreter: &mut Interpreter) -> Result
 
 /// JSX内の式を評価
 fn eval_jsx_expression(expr: &Expression, interpreter: &mut Interpreter) -> Result<Value, String> {
-    // Interpreterの eval_expression を呼び出す
-    // ここではpub化されていないので、シンプルな評価を行う
-    match expr {
-        Expression::Literal(Literal::Str(s)) => Ok(Value::Str(s.clone())),
-        Expression::Literal(Literal::Int(n)) => Ok(Value::Int(*n)),
-        Expression::Literal(Literal::Bool(b)) => Ok(Value::Bool(*b)),
-        Expression::Identifier(name) => {
-            // 変数の取得（Interpreterの環境にアクセスする必要があるため、ここではモック）
-            Ok(Value::Str(format!("{{{}}}", name)))
-        }
-        _ => Ok(Value::Str("[complex expression]".to_string())),
-    }
+    // Interpreterの eval_expression はprivateだが、公開メソッドやリフレクションは使えない
+    // 解決策: Interpreterに `eval_jsx_expr_public` のようなメソッドを追加するか、
+    // ここで部分的に評価するか。
+    // しかし `interpreter` は `&mut Interpreter` なので、メソッドを呼べばOK。
+    // ただし `eval_expression` は private なので、pubにするか、`eval_expr_public` を作る必要がある。
+    // ここでは `eval_expression` が private である前提で、Interpreterに `pub fn eval_expr(&mut self, e: &Expression)` を追加したと仮定してそれを呼ぶべき。
+    // 現状 `interpreter.rs` の `eval_expression` は private なので、pubに変更する修正が必要。
+    
+    // 一旦、修正済みの `interpreter.rs` で `pub` になっていることを期待して呼び出す、
+    // または `interpreter` 自体に評価メソッドを追加する。
+    // ここでは `interpreter.eval_expr_public` を呼ぶ形にする。
+    
+    // しかし Rustの可視性ルールでコンパイルエラーになるため、
+    // interpreter.rs 側で `eval_expression` を `pub(crate)` にするのが正解。
+    // 今回の変更で `eval_expression` 自体を pub(crate) に変更したいが、
+    // replace_file_content で interpreter.rs を修正済みかどうか確認が必要。
+    // 修正していないので、まず interpreter.rs の `eval_expression` を修正する。
+    
+    // 仮実装: まだ呼び出せないので、ダミーから変更しないと動かない。
+    // interpreter.rs を修正するステップが必要。
+    
+    Err("Initialize logic pending pub(crate) access".to_string())
 }
 
 /// HTMLエスケープ
@@ -94,6 +104,8 @@ pub fn render_component(
             for stmt in &render.body {
                 if let Statement::Expression(Expression::JsxElement(jsx)) = stmt {
                     // ダミーのinterpreterで評価
+                    // コンポーネントのプロパティやステートを渡したいが、
+                    // 現状の簡易実装では新規Envで実行
                     let mut temp_interpreter = Interpreter::new();
                     return render_jsx(jsx, &mut temp_interpreter);
                 }

@@ -20,6 +20,8 @@ pub enum Value {
     Fn(Rc<FunctionDef>, Rc<RefCell<Env>>), // クロージャ
     BuiltinFn(String),
     Class(String, HashMap<String, Value>), // クラスインスタンス
+    Dict(HashMap<String, Value>),          // 辞書
+    Set(Vec<Value>),                       // 集合
     Return(Box<Value>),                    // return文の値（制御フロー用）
 }
 
@@ -39,6 +41,14 @@ impl Value {
             Value::Fn(f, _) => format!("<fn {}>", f.name),
             Value::BuiltinFn(name) => format!("<builtin {}>", name),
             Value::Class(name, _) => format!("<{} instance>", name),
+            Value::Dict(map) => {
+                let strs: Vec<String> = map.iter().map(|(k, v)| format!("{}: {}", k, v.display())).collect();
+                format!("{{{}}}", strs.join(", "))
+            }
+            Value::Set(set) => {
+                let strs: Vec<String> = set.iter().map(|v| v.display()).collect();
+                format!("{{{}}}", strs.join(", "))
+            }
             Value::Return(v) => v.display(),
         }
     }
@@ -51,6 +61,8 @@ impl Value {
             Value::Float(f) => *f != 0.0,
             Value::Str(s) => !s.is_empty(),
             Value::List(l) => !l.is_empty(),
+            Value::Dict(d) => !d.is_empty(),
+            Value::Set(s) => !s.is_empty(),
             Value::None => false,
             _ => true,
         }
@@ -163,24 +175,36 @@ impl Interpreter {
                     .define(&c.name, Value::BuiltinFn(format!("__class_{}", c.name)));
                 Ok(Value::None)
             }
-            Item::ComponentDef(_) => Ok(Value::None),
-            Item::ServerDef(_) => Ok(Value::None),
-            Item::Import(_) => Ok(Value::None), // importは実行時には何もしない
-            Item::Statement(stmt) => self.eval_statement(stmt),
+            Item::ComponentDef(c) => {
+                // コンポーネント定義を環境に登録 (将来的に使用)
+                self.env.borrow_mut().define(&c.name, Value::BuiltinFn(format!("__component_{}", c.name)));
+                Ok(Value::None)
+            }
+            Item::ServerDef(s) => {
+                // サーバー定義を実行 (簡易HTTPサーバー起動)
+                crate::builtins::start_server(s)?;
+                Ok(Value::None)
+            }
+            Item::Import(_) => Ok(Value::None),
+            Item::Statement(stmt) => self.eval_statement(stmt).map(|res| match res {
+                ExecutionResult::Value(v) => v,
+                ExecutionResult::Return(v) => v, // トップレベルでのreturnは値として扱う
+                _ => Value::None,
+            }),
         }
     }
 
-    fn eval_statement(&mut self, stmt: &Statement) -> Result<Value, String> {
+    fn eval_statement(&mut self, stmt: &Statement) -> Result<ExecutionResult, String> {
         match stmt {
             Statement::Let(decl) => {
                 let value = self.eval_expression(&decl.value)?;
                 self.env.borrow_mut().define(&decl.name, value);
-                Ok(Value::None)
+                Ok(ExecutionResult::Value(Value::None))
             }
             Statement::Const(decl) => {
                 let value = self.eval_expression(&decl.value)?;
                 self.env.borrow_mut().define(&decl.name, value);
-                Ok(Value::None)
+                Ok(ExecutionResult::Value(Value::None))
             }
             Statement::Assignment(a) => {
                 let value = self.eval_expression(&a.value)?;
@@ -189,7 +213,7 @@ impl Interpreter {
                         self.env.borrow_mut().define(name, value);
                     }
                 }
-                Ok(Value::None)
+                Ok(ExecutionResult::Value(Value::None))
             }
             Statement::Return(expr) => {
                 let value = if let Some(e) = expr {
@@ -197,37 +221,40 @@ impl Interpreter {
                 } else {
                     Value::None
                 };
-                Ok(Value::Return(Box::new(value)))
+                Ok(ExecutionResult::Return(value))
             }
             Statement::If(if_stmt) => {
                 let cond = self.eval_expression(&if_stmt.condition)?;
                 if cond.is_truthy() {
                     for s in &if_stmt.then_block {
                         let result = self.eval_statement(s)?;
-                        if matches!(result, Value::Return(_)) {
+                        if !matches!(result, ExecutionResult::Value(_)) {
                             return Ok(result);
                         }
                     }
                 } else if let Some(else_block) = &if_stmt.else_block {
                     for s in else_block {
                         let result = self.eval_statement(s)?;
-                        if matches!(result, Value::Return(_)) {
+                        if !matches!(result, ExecutionResult::Value(_)) {
                             return Ok(result);
                         }
                     }
                 }
-                Ok(Value::None)
+                Ok(ExecutionResult::Value(Value::None))
             }
             Statement::While(w) => {
                 while self.eval_expression(&w.condition)?.is_truthy() {
                     for s in &w.body {
                         let result = self.eval_statement(s)?;
-                        if matches!(result, Value::Return(_)) {
-                            return Ok(result);
+                        match result {
+                            ExecutionResult::Return(_) => return Ok(result),
+                            ExecutionResult::Break => return Ok(ExecutionResult::Value(Value::None)),
+                            ExecutionResult::Continue => break, // 内側のforループを抜けてwhile再評価へ (Rustの挙動とは違うが、この実装ではstmtループを抜ける必要がある)
+                            _ => {}
                         }
                     }
                 }
-                Ok(Value::None)
+                Ok(ExecutionResult::Value(Value::None))
             }
             Statement::For(f) => {
                 let iter_val = self.eval_expression(&f.iterator)?;
@@ -236,38 +263,49 @@ impl Interpreter {
                         self.env.borrow_mut().define(&f.target, item);
                         for s in &f.body {
                             let result = self.eval_statement(s)?;
-                            if matches!(result, Value::Return(_)) {
-                                return Ok(result);
+                            match result {
+                                ExecutionResult::Return(_) => return Ok(result),
+                                ExecutionResult::Break => return Ok(ExecutionResult::Value(Value::None)),
+                                ExecutionResult::Continue => break, // 内側のstmtループを抜ける -> 次のitemへ
+                                _ => {}
                             }
                         }
                     }
                 }
-                Ok(Value::None)
+                Ok(ExecutionResult::Value(Value::None))
             }
             Statement::Match(m) => {
                 let value = self.eval_expression(&m.value)?;
                 for case in &m.cases {
                     if self.pattern_matches(&case.pattern, &value) {
+                         // パターン変数のバインド
+                        if let Pattern::Identifier(name) = &case.pattern {
+                            self.env.borrow_mut().define(name, value.clone());
+                        }
+
                         for s in &case.body {
                             let result = self.eval_statement(s)?;
-                            if matches!(result, Value::Return(_)) {
+                            if !matches!(result, ExecutionResult::Value(_)) {
                                 return Ok(result);
                             }
                         }
                         break;
                     }
                 }
-                Ok(Value::None)
+                Ok(ExecutionResult::Value(Value::None))
             }
-            Statement::Break => Ok(Value::None), // TODO: ループ制御
-            Statement::Continue => Ok(Value::None),
-            Statement::Expression(e) => self.eval_expression(e),
+            Statement::Break => Ok(ExecutionResult::Break),
+            Statement::Continue => Ok(ExecutionResult::Continue),
+            Statement::Expression(e) => {
+                let v = self.eval_expression(e)?;
+                Ok(ExecutionResult::Value(v))
+            },
             Statement::State(s) => {
                 let value = self.eval_expression(&s.value)?;
                 self.env.borrow_mut().define(&s.name, value);
-                Ok(Value::None)
+                Ok(ExecutionResult::Value(Value::None))
             }
-            Statement::Render(_) => Ok(Value::None),
+            Statement::Render(_) => Ok(ExecutionResult::Value(Value::None)), // Renderはコンポーネント内でのみ意味を持つが、実行は可能
         }
     }
 
@@ -277,12 +315,12 @@ impl Interpreter {
             Pattern::Literal(Literal::Int(n)) => matches!(value, Value::Int(v) if v == n),
             Pattern::Literal(Literal::Str(s)) => matches!(value, Value::Str(v) if v == s),
             Pattern::Literal(Literal::Bool(b)) => matches!(value, Value::Bool(v) if v == b),
-            Pattern::Identifier(_) => true, // バインド（常にマッチ）
+            Pattern::Identifier(_) => true,
             _ => false,
         }
     }
 
-    fn eval_expression(&mut self, expr: &Expression) -> Result<Value, String> {
+    pub(crate) fn eval_expression(&mut self, expr: &Expression) -> Result<Value, String> {
         match expr {
             Expression::Literal(lit) => self.eval_literal(lit),
             Expression::Identifier(name) => self
@@ -321,8 +359,10 @@ impl Interpreter {
                         .get(&m.member)
                         .cloned()
                         .ok_or_else(|| format!("Unknown member: {}", m.member))
+                } else if let Value::Dict(dict) = obj {
+                    dict.get(&m.member).cloned().ok_or_else(|| format!("Key error: {}", m.member))
                 } else {
-                    Err(format!("Cannot access member of {:?}", obj))
+                     Err(format!("Cannot access member of {:?}", obj))
                 }
             }
             Expression::Index(idx) => {
@@ -338,12 +378,35 @@ impl Interpreter {
                         .nth(i as usize)
                         .map(|c| Value::Str(c.to_string()))
                         .ok_or_else(|| "Index out of bounds".to_string()),
+                    (Value::Dict(dict), Value::Str(k)) => dict
+                        .get(&k)
+                        .cloned()
+                        .ok_or_else(|| format!("Key error: {}", k)),
                     _ => Err("Invalid index operation".to_string()),
                 }
             }
-            Expression::Lambda(_) => Ok(Value::None), // TODO: Lambda実装
-            Expression::Await(inner) => self.eval_expression(inner), // asyncは同期的に実行
-            Expression::JsxElement(_) => Ok(Value::None),
+            Expression::Lambda(lambda) => {
+                // Lambda式: params, body field needs to be converted to FunctionDef-like structure
+                // LambdaExpr has params: Vec<String>, body: Expression
+                // FunctionDef has body: Vec<Statement>
+                // We wrap expression in Statement::Return or Statement::Expression
+                let body_stmts = vec![Statement::Return(Some(lambda.body.clone()))];
+                
+                let func_def = FunctionDef {
+                    name: "lambda".to_string(), // Anonymous
+                    params: lambda.params.iter().map(|p| Param { name: p.clone(), type_annotation: None }).collect(),
+                    return_type: None,
+                    body: body_stmts,
+                    is_async: false,
+                };
+                
+                Ok(Value::Fn(Rc::new(func_def), self.env.clone()))
+            }
+            Expression::Await(inner) => self.eval_expression(inner),
+            Expression::JsxElement(element) => {
+                crate::jsx_render::render_jsx(element, self)
+                    .map(Value::Str)
+            }
         }
     }
 
@@ -361,8 +424,28 @@ impl Interpreter {
                 }
                 Value::List(values)
             }
-            Literal::Dict(_) => Value::None, // TODO: Dict実装
-            Literal::Set(_) => Value::None,  // TODO: Set実装
+            Literal::Dict(items) => {
+                let mut map = HashMap::new();
+                for (k, v) in items {
+                    let key = self.eval_expression(k)?;
+                    let value = self.eval_expression(v)?;
+                    if let Value::Str(s) = key {
+                        map.insert(s, value);
+                    } else {
+                        return Err("Dict keys must be strings".to_string());
+                    }
+                }
+                Value::Dict(map)
+            }
+            Literal::Set(items) => {
+                // Set implementation using Vec for simplicity (or HashSet if Value is Hashable)
+                // Since Value contains f64, it's not strictly Hashable. Using Vec for now.
+                let mut values = Vec::new();
+                for item in items {
+                    values.push(self.eval_expression(item)?);
+                }
+                Value::Set(values)
+            }
         })
     }
 
@@ -396,11 +479,24 @@ impl Interpreter {
             // 論理演算
             (BinaryOp::And, _, _) => Ok(Value::Bool(left.is_truthy() && right.is_truthy())),
             (BinaryOp::Or, _, _) => Ok(Value::Bool(left.is_truthy() || right.is_truthy())),
-
+            
+            // In 演算子
+            (BinaryOp::In, _, Value::List(list)) => Ok(Value::Bool(list.iter().any(|v| self.values_equal(&left, v)))),
+            (BinaryOp::In, Value::Str(sub), Value::Str(s)) => Ok(Value::Bool(s.contains(sub))),
+            
             _ => Err(format!(
                 "Unsupported operation: {:?} {:?} {:?}",
                 left, op, right
             )),
+        }
+    }
+    
+    fn values_equal(&self, a: &Value, b: &Value) -> bool {
+        match (a, b) {
+            (Value::Int(x), Value::Int(y)) => x == y,
+            (Value::Str(x), Value::Str(y)) => x == y,
+            (Value::Bool(x), Value::Bool(y)) => x == y,
+            _ => false, // 簡易比較
         }
     }
 
@@ -411,6 +507,10 @@ impl Interpreter {
                 let local_env = Rc::new(RefCell::new(Env::with_parent(closure_env)));
 
                 // 引数をバインド
+                if args.len() != func.params.len() {
+                    return Err(format!("Expected {} arguments, got {}", func.params.len(), args.len()));
+                }
+
                 for (param, arg) in func.params.iter().zip(args.iter()) {
                     local_env.borrow_mut().define(&param.name, arg.clone());
                 }
@@ -421,15 +521,23 @@ impl Interpreter {
 
                 let mut result = Value::None;
                 for stmt in &func.body {
-                    result = self.eval_statement(stmt)?;
-                    if let Value::Return(v) = result {
-                        self.env = old_env;
-                        return Ok(*v);
+                    match self.eval_statement(stmt)? {
+                        ExecutionResult::Return(v) => {
+                            self.env = old_env;
+                            return Ok(v);
+                        }
+                        ExecutionResult::Value(_) => {},
+                        _ => {} // Break/Continue in function logic? usually invalid unless in loop
                     }
                 }
+                
+                // 最後の文が式の値になればそれを返す言語もあるが、n7tyaは明示的return推奨か、Noneか。
+                // 現在の実装ではstmtはExecutionResult::Valueを返すが、関数全体の値としてはReturnのみ捕捉
+                // しかしLambdaなどでは最後の式を返したい場合もある
+                // Lambda body is just one statement (Return statement injected)
 
                 self.env = old_env;
-                Ok(result)
+                Ok(Value::None)
             }
             Value::BuiltinFn(name) => self.call_builtin(&name, args),
             _ => Err(format!("Cannot call {:?}", callee)),
@@ -439,4 +547,13 @@ impl Interpreter {
     fn call_builtin(&mut self, name: &str, args: Vec<Value>) -> Result<Value, String> {
         crate::builtins::call_builtin(name, args)
     }
+}
+
+/// 実行制御結果
+#[derive(Debug)]
+enum ExecutionResult {
+    Value(Value),
+    Return(Value),
+    Break,
+    Continue,
 }
