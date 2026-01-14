@@ -50,6 +50,8 @@ fn main() -> miette::Result<()> {
         println!("  n7tya new <name>    Create new project");
         println!("  n7tya fmt           Format code");
         println!("  n7tya check         Type check");
+        println!("  n7tya --version     Show version");
+        println!("  n7tya --update      Update n7tya");
         return Ok(());
     }
 
@@ -84,6 +86,15 @@ fn main() -> miette::Result<()> {
         }
         file if file.ends_with(".n7t") => {
             run_file(file)?;
+        }
+        "--version" | "-v" => {
+            println!("n7tya-lang v0.1.0");
+        }
+        "--update" => {
+            println!("To update n7tya-lang, please run:");
+            println!("  cd <n7tya-repo-dir>");
+            println!("  git pull origin main");
+            println!("  cargo build --release");
         }
         _ => {
             println!("Unknown command: {}", command);
