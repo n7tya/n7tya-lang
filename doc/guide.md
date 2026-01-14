@@ -126,7 +126,8 @@ n7tya fmt            # フォーマット
 n7tya new <name>     # 新規プロジェクト作成
 n7tya check <file>   # 型チェックのみ
 n7tya --version      # バージョン表示
-n7tya --update       # アップデート手順表示
+n7tya --help         # ヘルプ表示
+n7tya --update       # 自動アップデート
 ```
 
 ---

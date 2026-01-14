@@ -90,14 +90,15 @@ fn main() -> miette::Result<()> {
         "--version" | "-v" => {
             println!("n7tya-lang v0.1.0");
         }
+        "--help" | "-h" => {
+            print_help();
+        }
         "--update" => {
-            println!("To update n7tya-lang, please run:");
-            println!("  cd <n7tya-repo-dir>");
-            println!("  git pull origin main");
-            println!("  cargo build --release");
+            perform_update()?;
         }
         _ => {
             println!("Unknown command: {}", command);
+            println!("Run 'n7tya --help' for usage.");
         }
     }
 
@@ -429,5 +430,53 @@ fn format_directory(dir: &PathBuf) -> miette::Result<()> {
                 .map_err(|e| miette::miette!("Failed to write file: {}", e))?;
         }
     }
+    Ok(())
+}
+
+fn print_help() {
+    println!("n7tya-lang v0.1.0");
+    println!("Full-stack web programming language by @n7tya");
+    println!();
+    println!("Usage: n7tya <command> [args]");
+    println!();
+    println!("Commands:");
+    println!("  run                     Run project (requires n7tya.toml)");
+    println!("  <file.n7t>              Run a specific file");
+    println!("  build                   Type check the project");
+    println!("  test                    Run tests (src/test_*.n7t)");
+    println!("  fmt                     Format code");
+    println!("  new <name>              Create a new project");
+    println!("  check <file>            Type check a specific file");
+    println!();
+    println!("Options:");
+    println!("  -v, --version           Show version information");
+    println!("  -h, --help              Show this help message");
+    println!("  --update                Update n7tya to the latest version");
+}
+
+fn perform_update() -> miette::Result<()> {
+    println!("Updating n7tya-lang...");
+
+    // Check if cargo is installed
+    if std::process::Command::new("cargo").arg("--version").output().is_err() {
+        return Err(miette::miette!("Cargo is not found. Please install Rust and Cargo."));
+    }
+
+    println!("Executing: cargo install --git https://github.com/n7tya/n7tya-lang --force");
+
+    // cargo install --git ...
+    let status = std::process::Command::new("cargo")
+        .args(["install", "--git", "https://github.com/n7tya/n7tya-lang", "--force"])
+        .status()
+        .map_err(|e| miette::miette!("Failed to execute cargo install: {}", e))?;
+
+    if status.success() {
+        println!("✓ n7tya updated successfully!");
+        // print new version
+        let _ = std::process::Command::new("n7tya").arg("--version").status();
+    } else {
+        return Err(miette::miette!("Update failed. Please try manually."));
+    }
+
     Ok(())
 }
