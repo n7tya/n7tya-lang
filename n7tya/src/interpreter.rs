@@ -42,7 +42,10 @@ impl Value {
             Value::BuiltinFn(name) => format!("<builtin {}>", name),
             Value::Class(name, _) => format!("<{} instance>", name),
             Value::Dict(map) => {
-                let strs: Vec<String> = map.iter().map(|(k, v)| format!("{}: {}", k, v.display())).collect();
+                let strs: Vec<String> = map
+                    .iter()
+                    .map(|(k, v)| format!("{}: {}", k, v.display()))
+                    .collect();
                 format!("{{{}}}", strs.join(", "))
             }
             Value::Set(set) => {
@@ -158,6 +161,104 @@ impl Interpreter {
         Ok(result)
     }
 
+    pub fn run_server(&mut self, server_def: &ServerDef) -> Result<(), String> {
+        let port = 8080;
+        let addr = format!("127.0.0.1:{}", port);
+
+        let listener =
+            TcpListener::bind(&addr).map_err(|e| format!("Failed to bind port {}: {}", port, e))?;
+        println!("Server '{}' listening on http://{}", server_def.name, addr);
+
+        // サーバー自体の環境（グローバル環境のコピーなど）を保持したい場合はここで用意
+        // 現状はリクエストごとにグローバルのクローンから開始する形にする
+        let global_env = self.env.clone();
+
+        for stream in listener.incoming() {
+            let mut stream = stream.map_err(|e| format!("Connection failed: {}", e))?;
+
+            let mut buffer = [0; 1024];
+            if stream.read(&mut buffer).is_err() {
+                continue;
+            }
+
+            let request = String::from_utf8_lossy(&buffer);
+            let first_line = request.lines().next().unwrap_or("");
+            let parts: Vec<&str> = first_line.split_whitespace().collect();
+
+            let mut response_body = "Not Found".to_string();
+            let mut status = "404 Not Found";
+
+            if parts.len() >= 2 {
+                let method = parts[0];
+                let path = parts[1];
+
+                for item in &server_def.body {
+                    let crate::ast::ServerBodyItem::Route(route) = item;
+                    if route.method.eq_ignore_ascii_case(method) && route.path == path {
+                        // ルートマッチ -> 新しいスコープで実行
+                        let request_env =
+                            Rc::new(RefCell::new(Env::with_parent(global_env.clone())));
+                        self.env = request_env;
+
+                        // リクエスト情報を変数として定義する（将来的な拡張）
+                        // self.env.borrow_mut().define("request_path", Value::Str(path.to_string()));
+
+                        let mut route_result = Value::None;
+                        for stmt in &route.body {
+                            match self.eval_statement(stmt) {
+                                Ok(ExecutionResult::Return(v)) => {
+                                    route_result = v;
+                                    break;
+                                }
+                                Ok(ExecutionResult::Value(_)) => {}
+                                Ok(_) => {} // Break/Continue not valid here
+                                Err(e) => {
+                                    println!("Error in route handler: {}", e);
+                                    status = "500 Internal Server Error";
+                                    response_body = format!("Error: {}", e);
+                                    break;
+                                }
+                            }
+                        }
+
+                        // Returnされた値があればレスポンスにする
+                        if status == "404 Not Found" {
+                            // エラーでなければ
+                            status = "200 OK"; // デフォルト200
+                            if let Value::Str(s) = route_result {
+                                response_body = s;
+                            } else if let Value::None = route_result {
+                                // 何も返さなかった場合は空、あるいはデフォルトメッセージ
+                                if response_body == "Not Found" {
+                                    response_body = "OK".to_string();
+                                }
+                            } else {
+                                // 文字列以外は文字列化
+                                response_body = route_result.display();
+                            }
+                        }
+
+                        break;
+                    }
+                }
+            }
+
+            let response = format!(
+                "HTTP/1.1 {}\r\nContent-Length: {}\r\n\r\n{}",
+                status,
+                response_body.len(),
+                response_body
+            );
+
+            stream.write_all(response.as_bytes()).ok();
+            stream.flush().ok();
+        }
+
+        // Server loop never ends normally usually, but if break loop
+        self.env = global_env; // Restore env
+        Ok(())
+    }
+
     pub fn get_output(&self) -> &[String] {
         &self.output
     }
@@ -177,7 +278,9 @@ impl Interpreter {
             }
             Item::ComponentDef(c) => {
                 // コンポーネント定義を環境に登録 (将来的に使用)
-                self.env.borrow_mut().define(&c.name, Value::BuiltinFn(format!("__component_{}", c.name)));
+                self.env
+                    .borrow_mut()
+                    .define(&c.name, Value::BuiltinFn(format!("__component_{}", c.name)));
                 Ok(Value::None)
             }
             Item::ServerDef(s) => {
@@ -248,7 +351,9 @@ impl Interpreter {
                         let result = self.eval_statement(s)?;
                         match result {
                             ExecutionResult::Return(_) => return Ok(result),
-                            ExecutionResult::Break => return Ok(ExecutionResult::Value(Value::None)),
+                            ExecutionResult::Break => {
+                                return Ok(ExecutionResult::Value(Value::None))
+                            }
                             ExecutionResult::Continue => break, // 内側のforループを抜けてwhile再評価へ (Rustの挙動とは違うが、この実装ではstmtループを抜ける必要がある)
                             _ => {}
                         }
@@ -265,7 +370,9 @@ impl Interpreter {
                             let result = self.eval_statement(s)?;
                             match result {
                                 ExecutionResult::Return(_) => return Ok(result),
-                                ExecutionResult::Break => return Ok(ExecutionResult::Value(Value::None)),
+                                ExecutionResult::Break => {
+                                    return Ok(ExecutionResult::Value(Value::None))
+                                }
                                 ExecutionResult::Continue => break, // 内側のstmtループを抜ける -> 次のitemへ
                                 _ => {}
                             }
@@ -278,7 +385,7 @@ impl Interpreter {
                 let value = self.eval_expression(&m.value)?;
                 for case in &m.cases {
                     if self.pattern_matches(&case.pattern, &value) {
-                         // パターン変数のバインド
+                        // パターン変数のバインド
                         if let Pattern::Identifier(name) = &case.pattern {
                             self.env.borrow_mut().define(name, value.clone());
                         }
@@ -299,7 +406,7 @@ impl Interpreter {
             Statement::Expression(e) => {
                 let v = self.eval_expression(e)?;
                 Ok(ExecutionResult::Value(v))
-            },
+            }
             Statement::State(s) => {
                 let value = self.eval_expression(&s.value)?;
                 self.env.borrow_mut().define(&s.name, value);
@@ -360,9 +467,11 @@ impl Interpreter {
                         .cloned()
                         .ok_or_else(|| format!("Unknown member: {}", m.member))
                 } else if let Value::Dict(dict) = obj {
-                    dict.get(&m.member).cloned().ok_or_else(|| format!("Key error: {}", m.member))
+                    dict.get(&m.member)
+                        .cloned()
+                        .ok_or_else(|| format!("Key error: {}", m.member))
                 } else {
-                     Err(format!("Cannot access member of {:?}", obj))
+                    Err(format!("Cannot access member of {:?}", obj))
                 }
             }
             Expression::Index(idx) => {
@@ -391,21 +500,27 @@ impl Interpreter {
                 // FunctionDef has body: Vec<Statement>
                 // We wrap expression in Statement::Return or Statement::Expression
                 let body_stmts = vec![Statement::Return(Some(lambda.body.clone()))];
-                
+
                 let func_def = FunctionDef {
                     name: "lambda".to_string(), // Anonymous
-                    params: lambda.params.iter().map(|p| Param { name: p.clone(), type_annotation: None }).collect(),
+                    params: lambda
+                        .params
+                        .iter()
+                        .map(|p| Param {
+                            name: p.clone(),
+                            type_annotation: None,
+                        })
+                        .collect(),
                     return_type: None,
                     body: body_stmts,
                     is_async: false,
                 };
-                
+
                 Ok(Value::Fn(Rc::new(func_def), self.env.clone()))
             }
             Expression::Await(inner) => self.eval_expression(inner),
             Expression::JsxElement(element) => {
-                crate::jsx_render::render_jsx(element, self)
-                    .map(Value::Str)
+                crate::jsx_render::render_jsx(element, self).map(Value::Str)
             }
         }
     }
@@ -479,18 +594,20 @@ impl Interpreter {
             // 論理演算
             (BinaryOp::And, _, _) => Ok(Value::Bool(left.is_truthy() && right.is_truthy())),
             (BinaryOp::Or, _, _) => Ok(Value::Bool(left.is_truthy() || right.is_truthy())),
-            
+
             // In 演算子
-            (BinaryOp::In, _, Value::List(list)) => Ok(Value::Bool(list.iter().any(|v| self.values_equal(&left, v)))),
+            (BinaryOp::In, _, Value::List(list)) => Ok(Value::Bool(
+                list.iter().any(|v| self.values_equal(&left, v)),
+            )),
             (BinaryOp::In, Value::Str(sub), Value::Str(s)) => Ok(Value::Bool(s.contains(sub))),
-            
+
             _ => Err(format!(
                 "Unsupported operation: {:?} {:?} {:?}",
                 left, op, right
             )),
         }
     }
-    
+
     fn values_equal(&self, a: &Value, b: &Value) -> bool {
         match (a, b) {
             (Value::Int(x), Value::Int(y)) => x == y,
@@ -508,7 +625,11 @@ impl Interpreter {
 
                 // 引数をバインド
                 if args.len() != func.params.len() {
-                    return Err(format!("Expected {} arguments, got {}", func.params.len(), args.len()));
+                    return Err(format!(
+                        "Expected {} arguments, got {}",
+                        func.params.len(),
+                        args.len()
+                    ));
                 }
 
                 for (param, arg) in func.params.iter().zip(args.iter()) {
@@ -528,7 +649,7 @@ impl Interpreter {
                         _ => {}
                     }
                 }
-                
+
                 self.env = old_env;
                 Ok(Value::None)
             }

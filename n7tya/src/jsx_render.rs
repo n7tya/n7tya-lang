@@ -66,20 +66,20 @@ fn eval_jsx_expression(expr: &Expression, interpreter: &mut Interpreter) -> Resu
     // ただし `eval_expression` は private なので、pubにするか、`eval_expr_public` を作る必要がある。
     // ここでは `eval_expression` が private である前提で、Interpreterに `pub fn eval_expr(&mut self, e: &Expression)` を追加したと仮定してそれを呼ぶべき。
     // 現状 `interpreter.rs` の `eval_expression` は private なので、pubに変更する修正が必要。
-    
+
     // 一旦、修正済みの `interpreter.rs` で `pub` になっていることを期待して呼び出す、
     // または `interpreter` 自体に評価メソッドを追加する。
     // ここでは `interpreter.eval_expr_public` を呼ぶ形にする。
-    
+
     // しかし Rustの可視性ルールでコンパイルエラーになるため、
     // interpreter.rs 側で `eval_expression` を `pub(crate)` にするのが正解。
     // 今回の変更で `eval_expression` 自体を pub(crate) に変更したいが、
     // replace_file_content で interpreter.rs を修正済みかどうか確認が必要。
     // 修正していないので、まず interpreter.rs の `eval_expression` を修正する。
-    
+
     // 仮実装: まだ呼び出せないので、ダミーから変更しないと動かない。
     // interpreter.rs を修正するステップが必要。
-    
+
     Err("Initialize logic pending pub(crate) access".to_string())
 }
 

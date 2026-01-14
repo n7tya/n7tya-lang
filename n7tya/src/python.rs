@@ -8,7 +8,6 @@ use crate::interpreter::Value;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyTuple};
 
-
 /// Pythonランタイムを初期化
 pub fn init_python() -> Result<(), String> {
     pyo3::prepare_freethreaded_python();

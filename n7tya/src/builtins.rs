@@ -3,7 +3,7 @@
 //! 標準で利用可能な組み込み関数群
 
 use crate::interpreter::Value;
-use std::io::{self, Read, Write};
+use std::io::{self};
 
 /// 組み込み関数の実行
 pub fn call_builtin(name: &str, args: Vec<Value>) -> Result<Value, String> {
@@ -231,68 +231,4 @@ fn builtin_max(args: Vec<Value>) -> Result<Value, String> {
         }
     }
     Ok(Value::Int(max))
-}
-
-use crate::ast::ServerDef;
-use std::net::TcpListener;
-
-/// 簡易HTTPサーバーを起動
-pub fn start_server(server_def: &ServerDef) -> Result<(), String> {
-    // ポートの設定（configから読むべきだが、一旦8080固定）
-    let port = 8080;
-    let addr = format!("127.0.0.1:{}", port);
-    
-    let listener = TcpListener::bind(&addr).map_err(|e| format!("Failed to bind port {}: {}", port, e))?;
-    println!("Server '{}' listening on http://{}", server_def.name, addr);
-
-    for stream in listener.incoming() {
-        let mut stream = stream.map_err(|e| format!("Connection failed: {}", e))?;
-        
-        // リクエスト読み込み（簡易的）
-        let mut buffer = [0; 1024];
-        if stream.read(&mut buffer).is_err() {
-            continue;
-        }
-        
-        let request = String::from_utf8_lossy(&buffer);
-        let first_line = request.lines().next().unwrap_or("");
-        let parts: Vec<&str> = first_line.split_whitespace().collect();
-        
-        let mut response_body = "Not Found";
-        let mut status = "404 Not Found";
-
-        if parts.len() >= 2 {
-            let method = parts[0];
-            let path = parts[1];
-            
-            // ルーティング
-            for item in &server_def.body {
-                let crate::ast::ServerBodyItem::Route(route) = item;
-                if route.method.eq_ignore_ascii_case(method) && route.path == path {
-                        // ルートマッチ
-                        // 本来は route.body (Statementのリスト) を実行してレスポンスを生成する
-                        // ここでは簡易的に "Hello from path!" を返す
-                        // Interpreterを渡していないのでevalできないのが課題。
-                        // 設計上、InterpreterをServerに渡す必要があるが、Builtin関数からは参照しにくい。
-                        // 今回は静的レスポンスのみ対応とする。
-                        response_body = "Hello from n7tya server!"; 
-                        status = "200 OK";
-                        break;
-                    }
-
-            }
-        }
-
-        let response = format!(
-            "HTTP/1.1 {}\r\nContent-Length: {}\r\n\r\n{}",
-            status,
-            response_body.len(),
-            response_body
-        );
-
-        stream.write_all(response.as_bytes()).ok();
-        stream.flush().ok();
-    }
-    
-    Ok(())
 }

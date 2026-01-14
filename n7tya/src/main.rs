@@ -458,22 +458,35 @@ fn perform_update() -> miette::Result<()> {
     println!("Updating n7tya-lang...");
 
     // Check if cargo is installed
-    if std::process::Command::new("cargo").arg("--version").output().is_err() {
-        return Err(miette::miette!("Cargo is not found. Please install Rust and Cargo."));
+    if std::process::Command::new("cargo")
+        .arg("--version")
+        .output()
+        .is_err()
+    {
+        return Err(miette::miette!(
+            "Cargo is not found. Please install Rust and Cargo."
+        ));
     }
 
     println!("Executing: cargo install --git https://github.com/n7tya/n7tya-lang --force");
 
     // cargo install --git ...
     let status = std::process::Command::new("cargo")
-        .args(["install", "--git", "https://github.com/n7tya/n7tya-lang", "--force"])
+        .args([
+            "install",
+            "--git",
+            "https://github.com/n7tya/n7tya-lang",
+            "--force",
+        ])
         .status()
         .map_err(|e| miette::miette!("Failed to execute cargo install: {}", e))?;
 
     if status.success() {
         println!("✓ n7tya updated successfully!");
         // print new version
-        let _ = std::process::Command::new("n7tya").arg("--version").status();
+        let _ = std::process::Command::new("n7tya")
+            .arg("--version")
+            .status();
     } else {
         return Err(miette::miette!("Update failed. Please try manually."));
     }
