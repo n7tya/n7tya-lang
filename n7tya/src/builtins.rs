@@ -3,7 +3,7 @@
 //! 標準で利用可能な組み込み関数群
 
 use crate::interpreter::Value;
-use std::io::{self};
+use std::io::{self, Write};
 
 /// 組み込み関数の実行
 pub fn call_builtin(name: &str, args: Vec<Value>) -> Result<Value, String> {

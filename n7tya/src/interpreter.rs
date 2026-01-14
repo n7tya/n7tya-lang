@@ -6,6 +6,8 @@
 use crate::ast::*;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::io::{Read, Write};
+use std::net::TcpListener;
 use std::rc::Rc;
 
 /// 実行時の値
@@ -285,7 +287,7 @@ impl Interpreter {
             }
             Item::ServerDef(s) => {
                 // サーバー定義を実行 (簡易HTTPサーバー起動)
-                crate::builtins::start_server(s)?;
+                self.run_server(s)?;
                 Ok(Value::None)
             }
             Item::Import(_) => Ok(Value::None),
