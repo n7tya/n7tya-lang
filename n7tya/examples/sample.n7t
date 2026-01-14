@@ -1,0 +1,18 @@
+# n7tya-lang sample file
+
+def greet name
+	return "Hello, " + name
+
+let message = greet "World"
+
+component App
+	state count = 0
+	
+	def increment
+		self.count = self.count + 1
+	
+	render
+		<div>
+			<h1>Counter: {self.count}</h1>
+			<button onclick={self.increment}>+1</button>
+		</div>

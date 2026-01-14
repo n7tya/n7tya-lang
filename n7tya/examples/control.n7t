@@ -1,0 +1,24 @@
+# Control structures and data structures test
+
+def test_control_flow x: Int
+	if x > 10
+		return true
+	elif x > 5
+		return false
+	else
+		return false
+
+def test_loops
+	let items = [1, 2, 3, 4, 5]
+	for i in items
+		if i % 2 == 0
+			return i
+	
+	let count = 0
+	while count < 10
+		count = count + 1
+	
+	return count
+
+def test_operators a: Int, b: Int
+	return (a + b) * 2 > 10 and b < 5

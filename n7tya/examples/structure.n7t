@@ -1,0 +1,16 @@
+# Test file for structural definitions
+
+class User
+	name: Str
+	age: Int
+	
+	def greet prefix: Str
+		return prefix + " " + self.name
+
+server Api
+	route "/users"
+		return "List of users"
+	
+	post "/users/create"
+		let u = User() 
+		return "Created"
