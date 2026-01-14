@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! n7tya-lang Lexer (字句解析器)
 //!
 //! インデントベースの構文をトークンに分解する

@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! n7tya-lang Error Definitions
 //!
 //! mietteを活用した構造化エラー

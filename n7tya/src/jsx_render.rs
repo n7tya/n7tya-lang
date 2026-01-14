@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+#![allow(unused_variables)]
 //! JSX Rendering for n7tya-lang
 //!
 //! JSX要素をHTML文字列に変換するレンダラ

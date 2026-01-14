@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+#![allow(deprecated)]
 //! Python Integration for n7tya-lang
 //!
 //! pyo3を使用したPythonライブラリ連携
@@ -5,7 +7,7 @@
 use crate::interpreter::Value;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyTuple};
-use std::collections::HashMap;
+
 
 /// Pythonランタイムを初期化
 pub fn init_python() -> Result<(), String> {

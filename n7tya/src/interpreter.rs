@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Interpreter for n7tya-lang
 //!
 //! ASTを直接評価するTree-Walkingインタプリタ

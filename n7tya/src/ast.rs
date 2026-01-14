@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! AST (Abstract Syntax Tree) 定義
 
 /// プログラム全体
