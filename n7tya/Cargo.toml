@@ -1,7 +1,7 @@
 [package]
 name = "n7tya"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 description = "n7tya-lang - A full-stack web programming language"
 license = "MIT"
 
