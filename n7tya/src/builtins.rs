@@ -23,7 +23,10 @@ pub fn call_builtin(name: &str, args: Vec<Value>) -> Result<Value, String> {
         _ if name.starts_with("__class_") => {
             // クラスコンストラクタ
             let class_name = name.strip_prefix("__class_").unwrap();
-            Ok(Value::Class(class_name.to_string(), std::collections::HashMap::new()))
+            Ok(Value::Class(
+                class_name.to_string(),
+                std::collections::HashMap::new(),
+            ))
         }
         _ => Err(format!("Unknown builtin function: {}", name)),
     }
@@ -84,11 +87,12 @@ fn builtin_input(args: Vec<Value>) -> Result<Value, String> {
         print!("{}", prompt);
         io::stdout().flush().ok();
     }
-    
+
     let mut input = String::new();
-    io::stdin().read_line(&mut input)
+    io::stdin()
+        .read_line(&mut input)
         .map_err(|e| format!("Failed to read input: {}", e))?;
-    
+
     Ok(Value::Str(input.trim_end().to_string()))
 }
 
@@ -103,11 +107,10 @@ fn builtin_int(args: Vec<Value>) -> Result<Value, String> {
     match args.first() {
         Some(Value::Int(n)) => Ok(Value::Int(*n)),
         Some(Value::Float(f)) => Ok(Value::Int(*f as i64)),
-        Some(Value::Str(s)) => {
-            s.parse::<i64>()
-                .map(Value::Int)
-                .map_err(|_| format!("Cannot convert '{}' to int", s))
-        }
+        Some(Value::Str(s)) => s
+            .parse::<i64>()
+            .map(Value::Int)
+            .map_err(|_| format!("Cannot convert '{}' to int", s)),
         Some(Value::Bool(b)) => Ok(Value::Int(if *b { 1 } else { 0 })),
         _ => Err("int() requires a numeric or string argument".to_string()),
     }
@@ -117,11 +120,10 @@ fn builtin_float(args: Vec<Value>) -> Result<Value, String> {
     match args.first() {
         Some(Value::Int(n)) => Ok(Value::Float(*n as f64)),
         Some(Value::Float(f)) => Ok(Value::Float(*f)),
-        Some(Value::Str(s)) => {
-            s.parse::<f64>()
-                .map(Value::Float)
-                .map_err(|_| format!("Cannot convert '{}' to float", s))
-        }
+        Some(Value::Str(s)) => s
+            .parse::<f64>()
+            .map(Value::Float)
+            .map_err(|_| format!("Cannot convert '{}' to float", s)),
         _ => Err("float() requires a numeric or string argument".to_string()),
     }
 }
@@ -155,7 +157,7 @@ fn builtin_min(args: Vec<Value>) -> Result<Value, String> {
     if args.is_empty() {
         return Err("min() requires at least one argument".to_string());
     }
-    
+
     if let Some(Value::List(list)) = args.first() {
         if list.is_empty() {
             return Err("min() arg is an empty list".to_string());
@@ -167,12 +169,14 @@ fn builtin_min(args: Vec<Value>) -> Result<Value, String> {
         };
         for item in list.iter().skip(1) {
             if let Value::Int(n) = item {
-                if *n < min { min = *n; }
+                if *n < min {
+                    min = *n;
+                }
             }
         }
         return Ok(Value::Int(min));
     }
-    
+
     // 複数の引数
     let mut min = match &args[0] {
         Value::Int(n) => *n,
@@ -180,7 +184,9 @@ fn builtin_min(args: Vec<Value>) -> Result<Value, String> {
     };
     for arg in args.iter().skip(1) {
         if let Value::Int(n) = arg {
-            if *n < min { min = *n; }
+            if *n < min {
+                min = *n;
+            }
         }
     }
     Ok(Value::Int(min))
@@ -190,7 +196,7 @@ fn builtin_max(args: Vec<Value>) -> Result<Value, String> {
     if args.is_empty() {
         return Err("max() requires at least one argument".to_string());
     }
-    
+
     if let Some(Value::List(list)) = args.first() {
         if list.is_empty() {
             return Err("max() arg is an empty list".to_string());
@@ -201,19 +207,23 @@ fn builtin_max(args: Vec<Value>) -> Result<Value, String> {
         };
         for item in list.iter().skip(1) {
             if let Value::Int(n) = item {
-                if *n > max { max = *n; }
+                if *n > max {
+                    max = *n;
+                }
             }
         }
         return Ok(Value::Int(max));
     }
-    
+
     let mut max = match &args[0] {
         Value::Int(n) => *n,
         _ => return Err("max() requires integers".to_string()),
     };
     for arg in args.iter().skip(1) {
         if let Value::Int(n) = arg {
-            if *n > max { max = *n; }
+            if *n > max {
+                max = *n;
+            }
         }
     }
     Ok(Value::Int(max))

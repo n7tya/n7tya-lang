@@ -2,24 +2,24 @@
 //!
 //! フルスタックWebアプリを1言語で開発するためのプログラミング言語
 
-mod lexer;
 mod ast;
-mod parser;
-mod typechecker;
-mod interpreter;
-mod errors;
 mod builtins;
-mod python;
+mod errors;
+mod interpreter;
 mod jsx_render;
+mod lexer;
+mod parser;
+mod python;
+mod typechecker;
 
-use lexer::Lexer;
-use parser::Parser;
-use typechecker::TypeChecker;
 use interpreter::Interpreter;
+use lexer::Lexer;
 use miette::{Diagnostic, NamedSource, SourceSpan};
+use parser::Parser;
 use std::fs;
 use std::path::PathBuf;
 use thiserror::Error;
+use typechecker::TypeChecker;
 
 /// コンパイラエラー
 #[derive(Error, Debug, Diagnostic)]
@@ -121,7 +121,7 @@ fn run_file(path: &str) -> miette::Result<()> {
                     return Ok(());
                 }
             }
-            
+
             // 実行
             let mut interpreter = Interpreter::new();
             match interpreter.run(&program) {
@@ -250,31 +250,33 @@ main
 /// プロジェクトをビルド
 fn build_project() -> miette::Result<()> {
     println!("Building project...");
-    
+
     if !PathBuf::from("n7tya.toml").exists() {
-        return Err(miette::miette!("No n7tya.toml found. Are you in a n7tya project directory?"));
+        return Err(miette::miette!(
+            "No n7tya.toml found. Are you in a n7tya project directory?"
+        ));
     }
-    
+
     // srcディレクトリの全.n7tファイルを型チェック
     let src_dir = PathBuf::from("src");
     if !src_dir.exists() {
         return Err(miette::miette!("No src directory found"));
     }
-    
+
     let mut error_count = 0;
     for entry in fs::read_dir(&src_dir).map_err(|e| miette::miette!("Failed to read src: {}", e))? {
         let entry = entry.map_err(|e| miette::miette!("Failed to read entry: {}", e))?;
         let path = entry.path();
         if path.extension().map_or(false, |e| e == "n7t") {
             println!("  Checking {}...", path.display());
-            
+
             let source = fs::read_to_string(&path)
                 .map_err(|e| miette::miette!("Failed to read file: {}", e))?;
-            
+
             let mut lexer = Lexer::new(&source);
             let tokens = lexer.tokenize();
             let mut parser = Parser::new(tokens);
-            
+
             match parser.parse() {
                 Ok(program) => {
                     let mut checker = TypeChecker::new();
@@ -294,45 +296,47 @@ fn build_project() -> miette::Result<()> {
             }
         }
     }
-    
+
     if error_count == 0 {
         println!("✓ Build successful!");
     } else {
         println!("✗ Build failed with {} error(s)", error_count);
     }
-    
+
     Ok(())
 }
 
 /// テストを実行
 fn run_tests() -> miette::Result<()> {
     println!("Running tests...");
-    
+
     // testsディレクトリまたはtest_で始まるファイルを探す
     let test_dirs = vec![PathBuf::from("tests"), PathBuf::from("src")];
     let mut test_count = 0;
     let mut passed = 0;
     let mut failed = 0;
-    
+
     for dir in test_dirs {
-        if !dir.exists() { continue; }
-        
+        if !dir.exists() {
+            continue;
+        }
+
         for entry in fs::read_dir(&dir).map_err(|e| miette::miette!("Failed to read dir: {}", e))? {
             let entry = entry.map_err(|e| miette::miette!("Failed to read entry: {}", e))?;
             let path = entry.path();
             let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-            
+
             if path.extension().map_or(false, |e| e == "n7t") && name.starts_with("test_") {
                 test_count += 1;
                 println!("  Running {}...", name);
-                
+
                 let source = fs::read_to_string(&path)
                     .map_err(|e| miette::miette!("Failed to read test file: {}", e))?;
-                
+
                 let mut lexer = Lexer::new(&source);
                 let tokens = lexer.tokenize();
                 let mut parser = Parser::new(tokens);
-                
+
                 match parser.parse() {
                     Ok(program) => {
                         let mut interpreter = Interpreter::new();
@@ -355,21 +359,21 @@ fn run_tests() -> miette::Result<()> {
             }
         }
     }
-    
+
     if test_count == 0 {
         println!("No tests found. Create files starting with 'test_' in src/ or tests/");
     } else {
         println!();
         println!("{} tests: {} passed, {} failed", test_count, passed, failed);
     }
-    
+
     Ok(())
 }
 
 /// コードをフォーマット
 fn format_project() -> miette::Result<()> {
     println!("Formatting code...");
-    
+
     let src_dir = PathBuf::from("src");
     if !src_dir.exists() {
         // カレントディレクトリの.n7tファイルをフォーマット
@@ -377,7 +381,7 @@ fn format_project() -> miette::Result<()> {
     } else {
         format_directory(&src_dir)?;
     }
-    
+
     println!("✓ Formatting complete!");
     Ok(())
 }
@@ -386,13 +390,13 @@ fn format_directory(dir: &PathBuf) -> miette::Result<()> {
     for entry in fs::read_dir(dir).map_err(|e| miette::miette!("Failed to read dir: {}", e))? {
         let entry = entry.map_err(|e| miette::miette!("Failed to read entry: {}", e))?;
         let path = entry.path();
-        
+
         if path.extension().map_or(false, |e| e == "n7t") {
             println!("  Formatting {}...", path.display());
-            
+
             let source = fs::read_to_string(&path)
                 .map_err(|e| miette::miette!("Failed to read file: {}", e))?;
-            
+
             // シンプルなフォーマット: 末尾空白の削除、一貫したインデント
             let formatted: Vec<String> = source
                 .lines()
@@ -408,7 +412,7 @@ fn format_directory(dir: &PathBuf) -> miette::Result<()> {
                     }
                 })
                 .collect();
-            
+
             let formatted_content = formatted.join("\n") + "\n";
             fs::write(&path, formatted_content)
                 .map_err(|e| miette::miette!("Failed to write file: {}", e))?;
@@ -416,4 +420,3 @@ fn format_directory(dir: &PathBuf) -> miette::Result<()> {
     }
     Ok(())
 }
-

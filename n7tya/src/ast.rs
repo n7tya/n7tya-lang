@@ -21,7 +21,7 @@ pub enum Item {
 #[derive(Debug, Clone)]
 pub struct ImportStmt {
     pub module: String,
-    pub names: Vec<String>,  // from X import A, B, C
+    pub names: Vec<String>,    // from X import A, B, C
     pub alias: Option<String>, // import X as Y
 }
 
@@ -148,9 +148,9 @@ pub struct MatchCase {
 #[derive(Debug, Clone)]
 pub enum Pattern {
     Literal(Literal),
-    Identifier(String),    // 変数にバインド
-    Wildcard,              // _
-    Range(i64, i64),       // 1..10
+    Identifier(String), // 変数にバインド
+    Wildcard,           // _
+    Range(i64, i64),    // 1..10
 }
 
 /// 式
@@ -177,9 +177,19 @@ pub struct BinaryExpr {
 
 #[derive(Debug, Clone)]
 pub enum BinaryOp {
-    Add, Sub, Mul, Div, Mod,
-    Eq, Ne, Lt, Gt, Le, Ge,
-    And, Or,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+    Eq,
+    Ne,
+    Lt,
+    Gt,
+    Le,
+    Ge,
+    And,
+    Or,
     In, // x in list
 }
 
@@ -191,8 +201,8 @@ pub struct UnaryExpr {
 
 #[derive(Debug, Clone)]
 pub enum UnaryOp {
-    Neg,  // -x
-    Not,  // not x
+    Neg, // -x
+    Not, // not x
 }
 
 #[derive(Debug, Clone)]
@@ -238,7 +248,7 @@ pub enum Literal {
 #[derive(Debug, Clone)]
 pub struct ClassDef {
     pub name: String,
-    pub parent: Option<String>,  // 継承
+    pub parent: Option<String>, // 継承
     pub body: Vec<ClassBodyItem>,
 }
 
@@ -304,4 +314,3 @@ pub enum JsxChild {
     Text(String),
     Expression(Expression),
 }
-

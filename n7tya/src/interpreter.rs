@@ -3,9 +3,9 @@
 //! ASTを直接評価するTree-Walkingインタプリタ
 
 use crate::ast::*;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
-use std::cell::RefCell;
 
 /// 実行時の値
 #[derive(Debug, Clone)]
@@ -19,7 +19,7 @@ pub enum Value {
     Fn(Rc<FunctionDef>, Rc<RefCell<Env>>), // クロージャ
     BuiltinFn(String),
     Class(String, HashMap<String, Value>), // クラスインスタンス
-    Return(Box<Value>), // return文の値（制御フロー用）
+    Return(Box<Value>),                    // return文の値（制御フロー用）
 }
 
 impl Value {
@@ -41,7 +41,7 @@ impl Value {
             Value::Return(v) => v.display(),
         }
     }
-    
+
     /// 真偽値として評価
     pub fn is_truthy(&self) -> bool {
         match self {
@@ -70,18 +70,18 @@ impl Env {
             parent: None,
         }
     }
-    
+
     pub fn with_parent(parent: Rc<RefCell<Env>>) -> Self {
         Self {
             values: HashMap::new(),
             parent: Some(parent),
         }
     }
-    
+
     pub fn define(&mut self, name: &str, value: Value) {
         self.values.insert(name.to_string(), value);
     }
-    
+
     pub fn get(&self, name: &str) -> Option<Value> {
         if let Some(v) = self.values.get(name) {
             Some(v.clone())
@@ -91,7 +91,7 @@ impl Env {
             None
         }
     }
-    
+
     pub fn set(&mut self, name: &str, value: Value) -> bool {
         if self.values.contains_key(name) {
             self.values.insert(name.to_string(), value);
@@ -113,38 +113,42 @@ pub struct Interpreter {
 impl Interpreter {
     pub fn new() -> Self {
         let env = Rc::new(RefCell::new(Env::new()));
-        
+
         // 組み込み関数を登録
         let builtins = [
-            "print", "println", "len", "range", "input",
-            "str", "int", "float", "type", "abs", "min", "max"
+            "print", "println", "len", "range", "input", "str", "int", "float", "type", "abs",
+            "min", "max",
         ];
         for name in builtins {
-            env.borrow_mut().define(name, Value::BuiltinFn(name.to_string()));
+            env.borrow_mut()
+                .define(name, Value::BuiltinFn(name.to_string()));
         }
-        
-        Self { env, output: Vec::new() }
+
+        Self {
+            env,
+            output: Vec::new(),
+        }
     }
-    
+
     pub fn run(&mut self, program: &Program) -> Result<Value, String> {
         let mut result = Value::None;
-        
+
         for item in &program.items {
             result = self.eval_item(item)?;
-            
+
             // Return値が出たら終了
             if let Value::Return(v) = result {
                 return Ok(*v);
             }
         }
-        
+
         Ok(result)
     }
-    
+
     pub fn get_output(&self) -> &[String] {
         &self.output
     }
-    
+
     fn eval_item(&mut self, item: &Item) -> Result<Value, String> {
         match item {
             Item::FunctionDef(f) => {
@@ -153,7 +157,9 @@ impl Interpreter {
                 Ok(Value::None)
             }
             Item::ClassDef(c) => {
-                self.env.borrow_mut().define(&c.name, Value::BuiltinFn(format!("__class_{}", c.name)));
+                self.env
+                    .borrow_mut()
+                    .define(&c.name, Value::BuiltinFn(format!("__class_{}", c.name)));
                 Ok(Value::None)
             }
             Item::ComponentDef(_) => Ok(Value::None),
@@ -162,7 +168,7 @@ impl Interpreter {
             Item::Statement(stmt) => self.eval_statement(stmt),
         }
     }
-    
+
     fn eval_statement(&mut self, stmt: &Statement) -> Result<Value, String> {
         match stmt {
             Statement::Let(decl) => {
@@ -185,7 +191,11 @@ impl Interpreter {
                 Ok(Value::None)
             }
             Statement::Return(expr) => {
-                let value = if let Some(e) = expr { self.eval_expression(e)? } else { Value::None };
+                let value = if let Some(e) = expr {
+                    self.eval_expression(e)?
+                } else {
+                    Value::None
+                };
                 Ok(Value::Return(Box::new(value)))
             }
             Statement::If(if_stmt) => {
@@ -193,12 +203,16 @@ impl Interpreter {
                 if cond.is_truthy() {
                     for s in &if_stmt.then_block {
                         let result = self.eval_statement(s)?;
-                        if matches!(result, Value::Return(_)) { return Ok(result); }
+                        if matches!(result, Value::Return(_)) {
+                            return Ok(result);
+                        }
                     }
                 } else if let Some(else_block) = &if_stmt.else_block {
                     for s in else_block {
                         let result = self.eval_statement(s)?;
-                        if matches!(result, Value::Return(_)) { return Ok(result); }
+                        if matches!(result, Value::Return(_)) {
+                            return Ok(result);
+                        }
                     }
                 }
                 Ok(Value::None)
@@ -207,7 +221,9 @@ impl Interpreter {
                 while self.eval_expression(&w.condition)?.is_truthy() {
                     for s in &w.body {
                         let result = self.eval_statement(s)?;
-                        if matches!(result, Value::Return(_)) { return Ok(result); }
+                        if matches!(result, Value::Return(_)) {
+                            return Ok(result);
+                        }
                     }
                 }
                 Ok(Value::None)
@@ -219,7 +235,9 @@ impl Interpreter {
                         self.env.borrow_mut().define(&f.target, item);
                         for s in &f.body {
                             let result = self.eval_statement(s)?;
-                            if matches!(result, Value::Return(_)) { return Ok(result); }
+                            if matches!(result, Value::Return(_)) {
+                                return Ok(result);
+                            }
                         }
                     }
                 }
@@ -231,7 +249,9 @@ impl Interpreter {
                     if self.pattern_matches(&case.pattern, &value) {
                         for s in &case.body {
                             let result = self.eval_statement(s)?;
-                            if matches!(result, Value::Return(_)) { return Ok(result); }
+                            if matches!(result, Value::Return(_)) {
+                                return Ok(result);
+                            }
                         }
                         break;
                     }
@@ -249,7 +269,7 @@ impl Interpreter {
             Statement::Render(_) => Ok(Value::None),
         }
     }
-    
+
     fn pattern_matches(&self, pattern: &Pattern, value: &Value) -> bool {
         match pattern {
             Pattern::Wildcard => true,
@@ -260,13 +280,15 @@ impl Interpreter {
             _ => false,
         }
     }
-    
+
     fn eval_expression(&mut self, expr: &Expression) -> Result<Value, String> {
         match expr {
             Expression::Literal(lit) => self.eval_literal(lit),
-            Expression::Identifier(name) => {
-                self.env.borrow().get(name).ok_or_else(|| format!("Undefined variable: {}", name))
-            }
+            Expression::Identifier(name) => self
+                .env
+                .borrow()
+                .get(name)
+                .ok_or_else(|| format!("Undefined variable: {}", name)),
             Expression::BinaryOp(bin) => {
                 let left = self.eval_expression(&bin.left)?;
                 let right = self.eval_expression(&bin.right)?;
@@ -286,13 +308,18 @@ impl Interpreter {
             Expression::Call(call) => {
                 let callee = self.eval_expression(&call.func)?;
                 let mut args = Vec::new();
-                for arg in &call.args { args.push(self.eval_expression(arg)?); }
+                for arg in &call.args {
+                    args.push(self.eval_expression(arg)?);
+                }
                 self.call_function(callee, args)
             }
             Expression::MemberAccess(m) => {
                 let obj = self.eval_expression(&m.object)?;
                 if let Value::Class(_, fields) = obj {
-                    fields.get(&m.member).cloned().ok_or_else(|| format!("Unknown member: {}", m.member))
+                    fields
+                        .get(&m.member)
+                        .cloned()
+                        .ok_or_else(|| format!("Unknown member: {}", m.member))
                 } else {
                     Err(format!("Cannot access member of {:?}", obj))
                 }
@@ -301,12 +328,15 @@ impl Interpreter {
                 let obj = self.eval_expression(&idx.object)?;
                 let index = self.eval_expression(&idx.index)?;
                 match (obj, index) {
-                    (Value::List(items), Value::Int(i)) => {
-                        items.get(i as usize).cloned().ok_or_else(|| "Index out of bounds".to_string())
-                    }
-                    (Value::Str(s), Value::Int(i)) => {
-                        s.chars().nth(i as usize).map(|c| Value::Str(c.to_string())).ok_or_else(|| "Index out of bounds".to_string())
-                    }
+                    (Value::List(items), Value::Int(i)) => items
+                        .get(i as usize)
+                        .cloned()
+                        .ok_or_else(|| "Index out of bounds".to_string()),
+                    (Value::Str(s), Value::Int(i)) => s
+                        .chars()
+                        .nth(i as usize)
+                        .map(|c| Value::Str(c.to_string()))
+                        .ok_or_else(|| "Index out of bounds".to_string()),
                     _ => Err("Invalid index operation".to_string()),
                 }
             }
@@ -315,7 +345,7 @@ impl Interpreter {
             Expression::JsxElement(_) => Ok(Value::None),
         }
     }
-    
+
     fn eval_literal(&mut self, lit: &Literal) -> Result<Value, String> {
         Ok(match lit {
             Literal::Int(n) => Value::Int(*n),
@@ -325,14 +355,16 @@ impl Interpreter {
             Literal::None => Value::None,
             Literal::List(items) => {
                 let mut values = Vec::new();
-                for item in items { values.push(self.eval_expression(item)?); }
+                for item in items {
+                    values.push(self.eval_expression(item)?);
+                }
                 Value::List(values)
             }
             Literal::Dict(_) => Value::None, // TODO: Dict実装
             Literal::Set(_) => Value::None,  // TODO: Set実装
         })
     }
-    
+
     fn eval_binary_op(&self, op: &BinaryOp, left: Value, right: Value) -> Result<Value, String> {
         match (op, &left, &right) {
             // 算術演算
@@ -349,7 +381,7 @@ impl Interpreter {
                 }
             }
             (BinaryOp::Mod, Value::Int(a), Value::Int(b)) => Ok(Value::Int(a % b)),
-            
+
             // 比較演算
             (BinaryOp::Eq, Value::Int(a), Value::Int(b)) => Ok(Value::Bool(a == b)),
             (BinaryOp::Eq, Value::Str(a), Value::Str(b)) => Ok(Value::Bool(a == b)),
@@ -359,30 +391,33 @@ impl Interpreter {
             (BinaryOp::Gt, Value::Int(a), Value::Int(b)) => Ok(Value::Bool(a > b)),
             (BinaryOp::Le, Value::Int(a), Value::Int(b)) => Ok(Value::Bool(a <= b)),
             (BinaryOp::Ge, Value::Int(a), Value::Int(b)) => Ok(Value::Bool(a >= b)),
-            
+
             // 論理演算
             (BinaryOp::And, _, _) => Ok(Value::Bool(left.is_truthy() && right.is_truthy())),
             (BinaryOp::Or, _, _) => Ok(Value::Bool(left.is_truthy() || right.is_truthy())),
-            
-            _ => Err(format!("Unsupported operation: {:?} {:?} {:?}", left, op, right)),
+
+            _ => Err(format!(
+                "Unsupported operation: {:?} {:?} {:?}",
+                left, op, right
+            )),
         }
     }
-    
+
     fn call_function(&mut self, callee: Value, args: Vec<Value>) -> Result<Value, String> {
         match callee {
             Value::Fn(func, closure_env) => {
                 // 新しいスコープを作成
                 let local_env = Rc::new(RefCell::new(Env::with_parent(closure_env)));
-                
+
                 // 引数をバインド
                 for (param, arg) in func.params.iter().zip(args.iter()) {
                     local_env.borrow_mut().define(&param.name, arg.clone());
                 }
-                
+
                 // 関数を評価
                 let old_env = self.env.clone();
                 self.env = local_env;
-                
+
                 let mut result = Value::None;
                 for stmt in &func.body {
                     result = self.eval_statement(stmt)?;
@@ -391,7 +426,7 @@ impl Interpreter {
                         return Ok(*v);
                     }
                 }
-                
+
                 self.env = old_env;
                 Ok(result)
             }
@@ -399,7 +434,7 @@ impl Interpreter {
             _ => Err(format!("Cannot call {:?}", callee)),
         }
     }
-    
+
     fn call_builtin(&mut self, name: &str, args: Vec<Value>) -> Result<Value, String> {
         crate::builtins::call_builtin(name, args)
     }

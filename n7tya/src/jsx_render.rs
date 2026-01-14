@@ -3,15 +3,15 @@
 //! JSX要素をHTML文字列に変換するレンダラ
 
 use crate::ast::*;
-use crate::interpreter::{Value, Interpreter};
+use crate::interpreter::{Interpreter, Value};
 
 /// JSX要素をHTMLに変換
 pub fn render_jsx(element: &JsxElement, interpreter: &mut Interpreter) -> Result<String, String> {
     let mut html = String::new();
-    
+
     // 開始タグ
     html.push_str(&format!("<{}", element.tag));
-    
+
     // 属性
     for attr in &element.attributes {
         let value_str = if let Some(expr) = &attr.value {
@@ -24,15 +24,15 @@ pub fn render_jsx(element: &JsxElement, interpreter: &mut Interpreter) -> Result
         };
         html.push_str(&format!(" {}=\"{}\"", attr.name, escape_html(&value_str)));
     }
-    
+
     // 子要素がない場合は自己閉じタグ
     if element.children.is_empty() {
         html.push_str(" />");
         return Ok(html);
     }
-    
+
     html.push('>');
-    
+
     // 子要素
     for child in &element.children {
         match child {
@@ -48,10 +48,10 @@ pub fn render_jsx(element: &JsxElement, interpreter: &mut Interpreter) -> Result
             }
         }
     }
-    
+
     // 閉じタグ
     html.push_str(&format!("</{}>", element.tag));
-    
+
     Ok(html)
 }
 
@@ -81,7 +81,10 @@ fn escape_html(s: &str) -> String {
 }
 
 /// ComponentDefからHTMLを生成
-pub fn render_component(component: &ComponentDef, _interpreter: &mut Interpreter) -> Result<String, String> {
+pub fn render_component(
+    component: &ComponentDef,
+    _interpreter: &mut Interpreter,
+) -> Result<String, String> {
     // コンポーネントのrender部分を見つけてHTMLに変換
     for item in &component.body {
         if let ComponentBodyItem::Render(render) = item {
