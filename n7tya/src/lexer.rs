@@ -7,7 +7,7 @@ use logos::Logos;
 
 /// トークンの種類
 #[derive(Logos, Debug, Clone, PartialEq)]
-#[logos(skip r"[ ]+")] // スペースはスキップ（タブはインデント用に保持）
+#[logos(skip r"[ ]")] // 単一のスペースはスキップ（4スペース or タブはインデントとして認識）
 pub enum Token {
     // ===== キーワード =====
     #[token("def")]
@@ -170,7 +170,7 @@ pub enum Token {
     CloseTag,
 
     // ===== インデント・改行 =====
-    #[token("\t")]
+    #[regex(r"\t|    ")]
     Tab,
     #[token("\n")]
     Newline,
