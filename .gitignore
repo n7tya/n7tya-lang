@@ -21,3 +21,9 @@ dist/
 __pycache__/
 *.pyc
 .venv/
+
+# Internal docs
+AGENT.md
+doc/philosophy.md
+doc/specification.md
+doc/adoption.md
