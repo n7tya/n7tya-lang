@@ -40,7 +40,7 @@ fn main() -> miette::Result<()> {
     let args: Vec<String> = std::env::args().collect();
 
     if args.len() < 2 {
-        println!("n7tya-lang v0.1.0");
+        println!("n7tya-lang v0.1.1");
         println!();
         println!("Usage:");
         println!("  n7tya <file.n7t>    Run a file");
@@ -88,7 +88,7 @@ fn main() -> miette::Result<()> {
             run_file(file)?;
         }
         "--version" | "-v" => {
-            println!("n7tya-lang v0.1.0");
+            println!("n7tya-lang v0.1.1");
         }
         "--help" | "-h" => {
             print_help();

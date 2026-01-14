@@ -267,8 +267,8 @@ pub fn start_server(server_def: &ServerDef) -> Result<(), String> {
             
             // ルーティング
             for item in &server_def.body {
-                if let crate::ast::ServerBodyItem::Route(route) = item {
-                    if route.method.eq_ignore_ascii_case(method) && route.path == path {
+                let crate::ast::ServerBodyItem::Route(route) = item;
+                if route.method.eq_ignore_ascii_case(method) && route.path == path {
                         // ルートマッチ
                         // 本来は route.body (Statementのリスト) を実行してレスポンスを生成する
                         // ここでは簡易的に "Hello from path!" を返す
@@ -279,7 +279,7 @@ pub fn start_server(server_def: &ServerDef) -> Result<(), String> {
                         status = "200 OK";
                         break;
                     }
-                }
+
             }
         }
 

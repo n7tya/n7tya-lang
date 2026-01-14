@@ -519,23 +519,16 @@ impl Interpreter {
                 let old_env = self.env.clone();
                 self.env = local_env;
 
-                let mut result = Value::None;
                 for stmt in &func.body {
                     match self.eval_statement(stmt)? {
                         ExecutionResult::Return(v) => {
                             self.env = old_env;
                             return Ok(v);
                         }
-                        ExecutionResult::Value(_) => {},
-                        _ => {} // Break/Continue in function logic? usually invalid unless in loop
+                        _ => {}
                     }
                 }
                 
-                // 最後の文が式の値になればそれを返す言語もあるが、n7tyaは明示的return推奨か、Noneか。
-                // 現在の実装ではstmtはExecutionResult::Valueを返すが、関数全体の値としてはReturnのみ捕捉
-                // しかしLambdaなどでは最後の式を返したい場合もある
-                // Lambda body is just one statement (Return statement injected)
-
                 self.env = old_env;
                 Ok(Value::None)
             }
