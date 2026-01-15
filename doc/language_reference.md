@@ -10,9 +10,10 @@
 5. [組み込み関数](#組み込み関数)
 6. [メソッド](#メソッド)
 7. [文字列](#文字列)
-8. [クラス](#クラス)
-9. [サーバー](#サーバー)
-10. [Python連携](#python連携)
+8. [標準ライブラリ](#標準ライブラリ)
+9. [クラス](#クラス)
+10. [サーバー](#サーバー)
+11. [Python連携](#python連携)
 
 ---
 
@@ -299,6 +300,57 @@ let html = `
 
 ```python
 let greeting = "Hello, " + name + "!"
+```
+
+---
+
+## 標準ライブラリ
+
+### fs モジュール (ファイルシステム)
+
+```python
+# ファイル読み込み
+let content = fs.read_file "data.txt"
+
+# ファイル書き込み
+fs.write_file "output.txt", "Hello, World!"
+
+# ファイル存在確認
+if fs.exists "config.json"
+    println "Found config file"
+
+# ファイル/ディレクトリ削除
+fs.remove "temp.txt"
+
+# ディレクトリ内容一覧
+let files = fs.read_dir "."
+for file in files
+    println file
+```
+
+### json モジュール
+
+```python
+# JSON パース (文字列 → Dict/List)
+let data = json.parse `{"name": "Taro", "age": 25}`
+println data.get("name")  # → Taro
+
+# JSON 文字列化 (Dict/List → 文字列)
+let obj = [1, 2, 3]
+let json_str = json.stringify obj
+println json_str  # → [1,2,3]
+```
+
+### http モジュール (HTTPクライアント)
+
+```python
+# GET リクエスト
+let response = http.get "https://api.example.com/data"
+let data = json.parse response
+
+# POST リクエスト
+let body = json.stringify {"name": "Taro"}
+let result = http.post "https://api.example.com/users", body
 ```
 
 ---
