@@ -5,6 +5,35 @@
 
 use logos::Logos;
 
+/// エスケープシーケンスを処理する
+fn process_string_escapes(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+    
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            match chars.next() {
+                Some('n') => result.push('\n'),
+                Some('t') => result.push('\t'),
+                Some('r') => result.push('\r'),
+                Some('\\') => result.push('\\'),
+                Some('"') => result.push('"'),
+                Some('\'') => result.push('\''),
+                Some('0') => result.push('\0'),
+                Some(other) => {
+                    // 未知のエスケープはそのまま
+                    result.push('\\');
+                    result.push(other);
+                }
+                None => result.push('\\'),
+            }
+        } else {
+            result.push(c);
+        }
+    }
+    result
+}
+
 /// トークンの種類
 #[derive(Logos, Debug, Clone, PartialEq)]
 #[logos(skip r"[ ]")] // 単一のスペースはスキップ（4スペース or タブはインデントとして認識）
@@ -102,11 +131,19 @@ pub enum Token {
     #[regex(r"[0-9]+\.[0-9]+", |lex| lex.slice().parse::<f64>().ok())]
     FloatLiteral(f64),
 
-    #[regex(r#""[^"]*""#, |lex| {
+    // 文字列リテラル (エスケープシーケンス対応)
+    #[regex(r#""([^"\\]|\\.)*""#, |lex| {
+        let s = lex.slice();
+        Some(process_string_escapes(&s[1..s.len()-1]))
+    })]
+    StringLiteral(String),
+
+    // 複数行文字列リテラル (バッククォート)
+    #[regex(r"`[^`]*`", |lex| {
         let s = lex.slice();
         Some(s[1..s.len()-1].to_string())
     })]
-    StringLiteral(String),
+    MultiLineString(String),
 
     // ===== 識別子 =====
     #[regex(r"[a-zA-Z_][a-zA-Z0-9_]*", |lex| lex.slice().to_string())]

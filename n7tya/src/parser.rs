@@ -131,7 +131,7 @@ impl Parser {
             };
 
             let path_token = parser.peek_token().cloned();
-            if let Some(Token::StringLiteral(path)) = path_token {
+            if let Some(Token::StringLiteral(path) | Token::MultiLineString(path)) = path_token {
                 parser.advance(); // consume path
                 parser.consume(Token::Newline, "Expect newline after route path")?;
                 let body = parser.parse_block()?;
@@ -718,6 +718,7 @@ impl Parser {
                 Token::Identifier(_)
                 | Token::IntLiteral(_)
                 | Token::StringLiteral(_)
+                | Token::MultiLineString(_)
                 | Token::FloatLiteral(_)
                 | Token::LParen
                 | Token::LBrace
@@ -822,7 +823,7 @@ impl Parser {
                     self.advance();
                     return Ok(Expression::Literal(Literal::Float(f)));
                 }
-                Token::StringLiteral(s) => {
+                Token::StringLiteral(s) | Token::MultiLineString(s) => {
                     self.advance();
                     return Ok(Expression::Literal(Literal::Str(s)));
                 }
