@@ -353,6 +353,33 @@ let body = json.stringify {"name": "Taro"}
 let result = http.post "https://api.example.com/users", body
 ```
 
+### base64 モジュール
+
+```python
+let encoded = base64.encode "Hello"
+let decoded = base64.decode encoded
+```
+
+### sqlite モジュール
+
+```python
+# 接続
+let conn_id = sqlite.open "data.db"
+
+# カラム作成
+sqlite.execute conn_id, "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT)"
+
+# データ挿入
+sqlite.execute conn_id, "INSERT INTO users (name) VALUES (?)", "Taro"
+
+# データ取得
+let users = sqlite.query conn_id, "SELECT * FROM users"
+println users[0].get("name")
+
+# 切断
+sqlite.close conn_id
+```
+
 ---
 
 ## クラス
@@ -379,6 +406,22 @@ server MyApp
 
     GET "/api/data"
         return "OK"
+
+    POST "/api/users"
+        # request オブジェクトが自動で注入されます
+        println request.get("method")
+        println request.get("body")
+        return "Created"
+```
+
+**Request オブジェクトの構造**:
+```python
+{
+    "method": "POST",
+    "path": "/api/users",
+    "headers": {"content-type": "application/json", ...},
+    "body": "..."
+}
 ```
 
 **注意**: サーバー定義内でも空行を含めることができます。

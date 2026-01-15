@@ -145,6 +145,10 @@ impl Interpreter {
             "json.parse", "json.stringify",
             // http モジュール
             "http.get", "http.post",
+            // base64 モジュール
+            "base64.encode", "base64.decode",
+            // sqlite モジュール
+            "sqlite.open", "sqlite.execute", "sqlite.query", "sqlite.close",
         ];
         for name in builtins {
             env.borrow_mut()
@@ -187,32 +191,81 @@ impl Interpreter {
         for stream in listener.incoming() {
             let mut stream = stream.map_err(|e| format!("Connection failed: {}", e))?;
 
-            let mut buffer = [0; 1024];
-            if stream.read(&mut buffer).is_err() {
+            let mut buffer = [0; 4096];
+            let bytes_read = match stream.read(&mut buffer) {
+                Ok(n) => n,
+                Err(_) => continue,
+            };
+            if bytes_read == 0 {
                 continue;
             }
 
-            let request = String::from_utf8_lossy(&buffer);
-            let first_line = request.lines().next().unwrap_or("");
+            let request_str = String::from_utf8_lossy(&buffer[..bytes_read]);
+            let mut lines = request_str.lines();
+            
+            // Request Line
+            let first_line = lines.next().unwrap_or("");
             let parts: Vec<&str> = first_line.split_whitespace().collect();
 
             let mut response_body = "Not Found".to_string();
             let mut status = "404 Not Found";
 
             if parts.len() >= 2 {
-                let method = parts[0];
-                let path = parts[1];
+                let method = parts[0].to_string();
+                let path = parts[1].to_string();
+
+                // Parse Headers
+                let mut header_map = HashMap::new();
+                let mut body_start_index = 0;
+                
+                // ヘッダーとボディの境界を探す (\r\n\r\n)
+                if let Some(idx) = request_str.find("\r\n\r\n") {
+                    body_start_index = idx + 4;
+                    // ヘッダー解析
+                    for line in request_str[..idx].lines().skip(1) {
+                        if let Some((k, v)) = line.split_once(':') {
+                            header_map.insert(
+                                k.trim().to_lowercase(),
+                                Value::Str(v.trim().to_string())
+                            );
+                        }
+                    }
+                } else if let Some(idx) = request_str.find("\n\n") {
+                     body_start_index = idx + 2;
+                     // ヘッダー解析 (LFのみの場合)
+                     for line in request_str[..idx].lines().skip(1) {
+                         if let Some((k, v)) = line.split_once(':') {
+                             header_map.insert(
+                                 k.trim().to_lowercase(),
+                                 Value::Str(v.trim().to_string())
+                             );
+                         }
+                     }
+                }
+
+                let body = if body_start_index < request_str.len() {
+                    request_str[body_start_index..].trim_end_matches('\0').to_string()
+                } else {
+                    "".to_string()
+                };
 
                 for item in &server_def.body {
                     let crate::ast::ServerBodyItem::Route(route) = item;
-                    if route.method.eq_ignore_ascii_case(method) && route.path == path {
+                    if route.method.eq_ignore_ascii_case(&method) && route.path == path {
                         // ルートマッチ -> 新しいスコープで実行
                         let request_env =
                             Rc::new(RefCell::new(Env::with_parent(global_env.clone())));
                         self.env = request_env;
 
-                        // リクエスト情報を変数として定義する（将来的な拡張）
-                        // self.env.borrow_mut().define("request_path", Value::Str(path.to_string()));
+                        // request オブジェクトを構築して注入
+                        let mut request_data = HashMap::new();
+                        request_data.insert("method".to_string(), Value::Str(method.clone()));
+                        request_data.insert("path".to_string(), Value::Str(path.clone()));
+                        request_data.insert("headers".to_string(), Value::Dict(Rc::new(RefCell::new(header_map))));
+                        request_data.insert("body".to_string(), Value::Str(body.clone()));
+                        // TODO: Query params parsing
+
+                        self.env.borrow_mut().define("request", Value::Dict(Rc::new(RefCell::new(request_data))));
 
                         let mut route_result = Value::None;
                         for stmt in &route.body {

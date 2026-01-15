@@ -1,0 +1,65 @@
+# 高度標準ライブラリ検証
+# import base64
+# import sqlite
+# import fs
+
+println "=== Base64 Test ==="
+let original = "Hello, n7tya!"
+let encoded = base64.encode original
+println "Original: " + original
+println "Encoded:  " + encoded
+
+let decoded = base64.decode encoded
+println "Decoded:  " + decoded
+
+if original == decoded
+    println "✓ Base64 roundtrip successful"
+else
+    println "✗ Base64 roundtrip failed"
+
+println "\n=== SQLite Test ==="
+let db_path = "test.db"
+if fs.exists db_path
+    fs.remove db_path
+
+let conn_id = sqlite.open db_path
+println "Opened DB with ID: " + str(conn_id)
+
+# テーブル作成
+let create_sql = "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, email TEXT)"
+sqlite.execute conn_id, create_sql
+println "Table created"
+
+# データ挿入
+let insert_sql = "INSERT INTO users (name, email) VALUES (?, ?)"
+let affected = sqlite.execute conn_id, insert_sql, "Taro", "taro@example.com"
+println "Inserted rows: " + str(affected)
+
+sqlite.execute conn_id, insert_sql, "Hanako", "hanako@example.com"
+println "Inserted rows: " + str(affected)
+
+# データ取得
+let select_sql = "SELECT * FROM users"
+let users = sqlite.query conn_id, select_sql
+println "Query result:"
+println users
+
+if len(users) == 2
+    println "✓ Retrieved 2 users"
+else
+    println "✗ Expected 2 users, got " + str(len(users))
+
+# データ更新
+let update_sql = "UPDATE users SET email = ? WHERE name = ?"
+sqlite.execute conn_id, update_sql, "taro_new@example.com", "Taro"
+println "Updated user"
+
+# 更新確認
+let user_taro = sqlite.query conn_id, "SELECT email FROM users WHERE name = 'Taro'"
+let first_user = user_taro[0]
+println "New email: " + str(first_user.get("email"))
+
+sqlite.close conn_id
+println "DB closed"
+
+fs.remove db_path

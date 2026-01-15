@@ -37,7 +37,7 @@ impl TypeEnv {
         // 汎用関数型 (任意の型を受け付ける)
         let any_fn = TypeInfo::Fn {
             params: vec![TypeInfo::Unknown],
-            ret: Box::new(TypeInfo::None),
+            ret: Box::new(TypeInfo::Unknown),
         };
         let any_to_int = TypeInfo::Fn {
             params: vec![TypeInfo::Unknown],
@@ -103,6 +103,16 @@ impl TypeEnv {
         // http モジュール
         global.insert("http.get".to_string(), any_to_str.clone());
         global.insert("http.post".to_string(), any_to_str.clone());
+
+        // base64 モジュール
+        global.insert("base64.encode".to_string(), any_to_str.clone());
+        global.insert("base64.decode".to_string(), any_to_str.clone());
+
+        // sqlite モジュール
+        global.insert("sqlite.open".to_string(), any_to_int.clone());
+        global.insert("sqlite.execute".to_string(), any_to_int.clone());
+        global.insert("sqlite.query".to_string(), any_fn.clone()); // List<Dict>だが動的なのでUnknownにする
+        global.insert("sqlite.close".to_string(), any_fn.clone());
 
         Self {
             scopes: vec![global],

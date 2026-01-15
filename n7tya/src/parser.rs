@@ -722,7 +722,6 @@ impl Parser {
                 | Token::FloatLiteral(_)
                 | Token::LParen
                 | Token::LBrace
-                | Token::LBracket
                 | Token::SelfKw => true,
                 _ => false,
             }
@@ -756,6 +755,10 @@ impl Parser {
                 }
                 self.consume(Token::RParen, "Expect ')' after arguments")?;
                 expr = Expression::Call(Box::new(CallExpr { func: expr, args }));
+            } else if self.match_token(Token::LBracket) {
+                let index = self.parse_expression()?;
+                self.consume(Token::RBracket, "Expect ']' after index")?;
+                expr = Expression::Index(Box::new(IndexExpr { object: expr, index }));
             } else {
                 break;
             }

@@ -43,6 +43,14 @@ pub fn call_builtin(name: &str, args: Vec<Value>) -> Result<Value, String> {
         // http モジュール
         "http.get" => builtin_http_get(args),
         "http.post" => builtin_http_post(args),
+        // base64 モジュール
+        "base64.encode" => builtin_base64_encode(args),
+        "base64.decode" => builtin_base64_decode(args),
+        // sqlite モジュール
+        "sqlite.open" => builtin_sqlite_open(args),
+        "sqlite.execute" => builtin_sqlite_execute(args),
+        "sqlite.query" => builtin_sqlite_query(args),
+        "sqlite.close" => builtin_sqlite_close(args),
         _ if name.starts_with("__class_") => {
             // クラスコンストラクタ
             let class_name = name.strip_prefix("__class_").unwrap();
@@ -543,6 +551,169 @@ fn builtin_http_get(args: Vec<Value>) -> Result<Value, String> {
         }
     } else {
         Err("http.get() expects a URL string".to_string())
+    }
+}
+
+// ============================================================
+// base64 モジュール
+// ============================================================
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
+
+fn builtin_base64_encode(args: Vec<Value>) -> Result<Value, String> {
+    if args.len() != 1 {
+        return Err("base64.encode() takes exactly 1 argument".to_string());
+    }
+    match &args[0] {
+        Value::Str(s) => Ok(Value::Str(BASE64.encode(s))),
+        _ => Err("base64.encode() expects a string".to_string()),
+    }
+}
+
+fn builtin_base64_decode(args: Vec<Value>) -> Result<Value, String> {
+    if args.len() != 1 {
+        return Err("base64.decode() takes exactly 1 argument".to_string());
+    }
+    match &args[0] {
+        Value::Str(s) => match BASE64.decode(s) {
+            Ok(bytes) => match String::from_utf8(bytes) {
+                Ok(s) => Ok(Value::Str(s)),
+                Err(_) => Err("base64 decoded result is not valid UTF-8".to_string()),
+            },
+            Err(e) => Err(format!("base64 decode error: {}", e)),
+        },
+        _ => Err("base64.decode() expects a string".to_string()),
+    }
+}
+
+// ============================================================
+// sqlite モジュール
+// ============================================================
+use rusqlite::{Connection, params_from_iter};
+use std::sync::atomic::{AtomicI64, Ordering};
+
+// SQLite接続を管理するスレッドローカルストレージ
+thread_local! {
+    static SQLITE_CONNECTIONS: RefCell<HashMap<i64, Connection>> = RefCell::new(HashMap::new());
+}
+
+static NEXT_CONN_ID: AtomicI64 = AtomicI64::new(1);
+
+fn builtin_sqlite_open(args: Vec<Value>) -> Result<Value, String> {
+    if args.len() != 1 {
+        return Err("sqlite.open() takes exactly 1 argument".to_string());
+    }
+    if let Value::Str(path) = &args[0] {
+        match Connection::open(path) {
+            Ok(conn) => {
+                let id = NEXT_CONN_ID.fetch_add(1, Ordering::SeqCst);
+                SQLITE_CONNECTIONS.with(|conns| {
+                    conns.borrow_mut().insert(id, conn);
+                });
+                Ok(Value::Int(id))
+            }
+            Err(e) => Err(format!("SQLite open error: {}", e)),
+        }
+    } else {
+        Err("sqlite.open() expects a path string".to_string())
+    }
+}
+
+fn builtin_sqlite_execute(args: Vec<Value>) -> Result<Value, String> {
+    if args.len() < 2 {
+        return Err("sqlite.execute() takes at least 2 arguments (conn_id, sql)".to_string());
+    }
+    match (&args[0], &args[1]) {
+        (Value::Int(id), Value::Str(sql)) => {
+            let params: Vec<Box<dyn rusqlite::ToSql>> = args.iter().skip(2).map(|v| {
+                let p: Box<dyn rusqlite::ToSql> = match v {
+                    Value::Int(n) => Box::new(*n),
+                    Value::Float(f) => Box::new(*f),
+                    Value::Str(s) => Box::new(s.clone()),
+                    Value::Bool(b) => Box::new(*b),
+                    Value::None => Box::new(rusqlite::types::Null),
+                    _ => Box::new(v.display()), // Fallback to string repr
+                };
+                p
+            }).collect();
+
+            SQLITE_CONNECTIONS.with(|conns| {
+                if let Some(conn) = conns.borrow().get(id) {
+                    match conn.execute(sql, params_from_iter(params.iter())) {
+                        Ok(affected) => Ok(Value::Int(affected as i64)),
+                        Err(e) => Err(format!("SQLite execute error: {}", e)),
+                    }
+                } else {
+                    Err("Invalid SQLite connection ID".to_string())
+                }
+            })
+        }
+        _ => Err("sqlite.execute() expects (id: Int, sql: Str)".to_string()),
+    }
+}
+
+fn builtin_sqlite_query(args: Vec<Value>) -> Result<Value, String> {
+    if args.len() < 2 {
+        return Err("sqlite.query() takes at least 2 arguments (conn_id, sql)".to_string());
+    }
+    match (&args[0], &args[1]) {
+        (Value::Int(id), Value::Str(sql)) => {
+            let params_vals: Vec<Box<dyn rusqlite::ToSql>> = args.iter().skip(2).map(|v| {
+                let p: Box<dyn rusqlite::ToSql> = match v {
+                    Value::Int(n) => Box::new(*n),
+                    Value::Float(f) => Box::new(*f),
+                    Value::Str(s) => Box::new(s.clone()),
+                    Value::Bool(b) => Box::new(*b),
+                    Value::None => Box::new(rusqlite::types::Null),
+                    _ => Box::new(v.display()),
+                };
+                p
+            }).collect();
+
+            SQLITE_CONNECTIONS.with(|conns| {
+                if let Some(conn) = conns.borrow().get(id) {
+                    let mut stmt = conn.prepare(sql).map_err(|e| e.to_string())?;
+                    let col_names: Vec<String> = stmt.column_names().into_iter().map(|s| s.to_string()).collect();
+                    
+                    let rows = stmt.query_map(params_from_iter(params_vals.iter()), |row| {
+                        let mut dict = HashMap::new();
+                        for (i, col_name) in col_names.iter().enumerate() {
+                            let val = match row.get_ref(i)? {
+                                rusqlite::types::ValueRef::Null => Value::None,
+                                rusqlite::types::ValueRef::Integer(n) => Value::Int(n),
+                                rusqlite::types::ValueRef::Real(f) => Value::Float(f),
+                                rusqlite::types::ValueRef::Text(t) => Value::Str(String::from_utf8_lossy(t).to_string()),
+                                rusqlite::types::ValueRef::Blob(b) => Value::Str(BASE64.encode(b)), // Blob as Base64
+                            };
+                            dict.insert(col_name.clone(), val);
+                        }
+                        Ok(Value::Dict(Rc::new(RefCell::new(dict))))
+                    }).map_err(|e| e.to_string())?;
+
+                    let result_list: Vec<Value> = rows.filter_map(Result::ok).collect();
+                    Ok(Value::List(Rc::new(RefCell::new(result_list))))
+                } else {
+                    Err("Invalid SQLite connection ID".to_string())
+                }
+            })
+        }
+        _ => Err("sqlite.query() expects (id: Int, sql: Str)".to_string()),
+    }
+}
+
+fn builtin_sqlite_close(args: Vec<Value>) -> Result<Value, String> {
+    if args.len() != 1 {
+        return Err("sqlite.close() takes exactly 1 argument".to_string());
+    }
+    if let Value::Int(id) = &args[0] {
+        SQLITE_CONNECTIONS.with(|conns| {
+            if conns.borrow_mut().remove(id).is_some() {
+                Ok(Value::None)
+            } else {
+                Err("Invalid SQLite connection ID".to_string())
+            }
+        })
+    } else {
+        Err("sqlite.close() expects an integer ID".to_string())
     }
 }
 
