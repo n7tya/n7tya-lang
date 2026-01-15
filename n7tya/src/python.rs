@@ -88,6 +88,7 @@ pub fn value_to_py(py: Python, value: &Value) -> PyObject {
         Value::Bool(b) => b.into_py(py),
         Value::None => py.None(),
         Value::List(items) => {
+            let items = items.borrow();
             let py_items: Vec<PyObject> = items.iter().map(|v| value_to_py(py, v)).collect();
             PyList::new(py, &py_items).unwrap().into_py(py)
         }
@@ -120,7 +121,7 @@ pub fn py_to_value(py: Python, obj: &PyObject) -> Result<Value, String> {
             .iter()
             .map(|item| py_to_value(py, &item.into_py(py)))
             .collect();
-        return Ok(Value::List(items?));
+        return Ok(Value::List(std::rc::Rc::new(std::cell::RefCell::new(items?))));
     }
 
     // 未対応の型はNoneとして扱う

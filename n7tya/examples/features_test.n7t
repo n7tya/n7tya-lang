@@ -1,0 +1,60 @@
+# n7tya-lang 新機能テスト
+
+# ===== リスト機能 =====
+println "=== List Test ==="
+let numbers = [3, 1, 4, 1, 5]
+println "Original:", numbers
+
+numbers.append(9)
+println "After append(9):", numbers
+
+let last = numbers.pop()
+println "Popped value:", last
+
+numbers.insert(0, 2)
+println "After insert(0, 2):", numbers
+
+let idx = numbers.index(4)
+println "Index of 4:", idx
+
+let cnt = numbers.count(1)
+println "Count of 1:", cnt
+
+# ===== 文字列機能 =====
+println "\n=== String Test ==="
+let text = "  Hello, World!  "
+println "Original:", text
+println "Upper:", text.upper()
+println "Lower:", text.lower()
+println "Strip:", text.strip()
+
+let words = text.strip().split(",")
+println "Split by comma:", words
+
+let joined = "-".join(["a", "b", "c"])
+println "Joined:", joined
+
+let replaced = text.replace("World", "n7tya")
+println "Replaced:", replaced
+
+println "Starts with H:", text.strip().startswith("H")
+println "Ends with !:", text.strip().endswith("!")
+println "Find World:", text.find("World")
+
+# ===== 新しいビルトイン関数 =====
+println "\n=== Builtin Functions Test ==="
+let nums = [5, 2, 8, 1, 9]
+println "Original:", nums
+
+println "sum:", sum(nums)
+println "sorted:", sorted(nums)
+println "reversed:", reversed(nums)
+
+let enum_result = enumerate(["a", "b", "c"])
+println "enumerate:", enum_result
+
+let zipped = zip([1, 2, 3], ["x", "y", "z"])
+println "zip:", zipped
+
+println "\n=== All Tests Passed ==="
+

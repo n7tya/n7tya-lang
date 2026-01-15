@@ -33,21 +33,58 @@ pub struct TypeEnv {
 impl TypeEnv {
     pub fn new() -> Self {
         let mut global = HashMap::new();
-        // 組み込み関数の型を登録
-        global.insert(
-            "print".to_string(),
-            TypeInfo::Fn {
-                params: vec![TypeInfo::Unknown], // 任意の型を受け付ける
-                ret: Box::new(TypeInfo::None),
-            },
-        );
-        global.insert(
-            "len".to_string(),
-            TypeInfo::Fn {
-                params: vec![TypeInfo::Unknown],
-                ret: Box::new(TypeInfo::Int),
-            },
-        );
+
+        // 汎用関数型 (任意の型を受け付ける)
+        let any_fn = TypeInfo::Fn {
+            params: vec![TypeInfo::Unknown],
+            ret: Box::new(TypeInfo::None),
+        };
+        let any_to_int = TypeInfo::Fn {
+            params: vec![TypeInfo::Unknown],
+            ret: Box::new(TypeInfo::Int),
+        };
+        let any_to_str = TypeInfo::Fn {
+            params: vec![TypeInfo::Unknown],
+            ret: Box::new(TypeInfo::Str),
+        };
+        let any_to_list = TypeInfo::Fn {
+            params: vec![TypeInfo::Unknown],
+            ret: Box::new(TypeInfo::List(Box::new(TypeInfo::Unknown))),
+        };
+        let any_to_bool = TypeInfo::Fn {
+            params: vec![TypeInfo::Unknown],
+            ret: Box::new(TypeInfo::Bool),
+        };
+        let any_to_float = TypeInfo::Fn {
+            params: vec![TypeInfo::Unknown],
+            ret: Box::new(TypeInfo::Float),
+        };
+
+        // 入出力
+        global.insert("print".to_string(), any_fn.clone());
+        global.insert("println".to_string(), any_fn.clone());
+        global.insert("input".to_string(), any_to_str.clone());
+
+        // コレクション
+        global.insert("len".to_string(), any_to_int.clone());
+        global.insert("range".to_string(), any_to_list.clone());
+        global.insert("sum".to_string(), any_to_int.clone());
+        global.insert("sorted".to_string(), any_to_list.clone());
+        global.insert("reversed".to_string(), any_to_list.clone());
+        global.insert("enumerate".to_string(), any_to_list.clone());
+        global.insert("zip".to_string(), any_to_list.clone());
+
+        // 型変換
+        global.insert("str".to_string(), any_to_str.clone());
+        global.insert("int".to_string(), any_to_int.clone());
+        global.insert("float".to_string(), any_to_float.clone());
+        global.insert("type".to_string(), any_to_str.clone());
+        global.insert("bool".to_string(), any_to_bool.clone());
+
+        // 数値
+        global.insert("abs".to_string(), any_to_int.clone());
+        global.insert("min".to_string(), any_to_int.clone());
+        global.insert("max".to_string(), any_to_int.clone());
 
         Self {
             scopes: vec![global],
