@@ -170,7 +170,21 @@ impl TypeChecker {
             Item::ClassDef(c) => self.check_class_def(c),
             Item::ComponentDef(c) => self.check_component_def(c),
             Item::ServerDef(s) => self.check_server_def(s),
-            Item::Import(_) => {} // importは型チェック不要
+            Item::Import(imp) => {
+                if let Some(alias) = &imp.alias {
+                    self.env.define(alias, TypeInfo::Unknown);
+                } else if !imp.names.is_empty() {
+                    for name in &imp.names {
+                        self.env.define(name, TypeInfo::Unknown);
+                    }
+                } else {
+                    let name = std::path::Path::new(&imp.module)
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("module");
+                    self.env.define(name, TypeInfo::Unknown);
+                }
+            }
             Item::Statement(s) => {
                 self.check_statement(s);
             }

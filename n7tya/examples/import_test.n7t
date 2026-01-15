@@ -1,0 +1,17 @@
+# ローカルファイルインポートテスト
+# 実行ディレクトリ基準なので examples/lib_module を指定
+import "examples/lib_module" as lib
+
+println "Testing import..."
+let msg = lib.hello("n7tya")
+println msg
+
+if msg == "Hello, n7tya from module!"
+    println "✓ Function import successful"
+else
+    println "✗ Function import failed"
+
+if lib.get("secret") == 42
+    println "✓ Variable import successful"
+else
+    println "✗ Variable import failed"

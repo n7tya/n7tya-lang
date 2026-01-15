@@ -4,6 +4,9 @@
 //! ASTを直接評価するTree-Walkingインタプリタ
 
 use crate::ast::*;
+use crate::lexer::Lexer;
+use crate::parser::Parser;
+use std::path::Path;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::io::{Read, Write};
@@ -352,7 +355,10 @@ impl Interpreter {
                 self.run_server(s)?;
                 Ok(Value::None)
             }
-            Item::Import(_) => Ok(Value::None),
+            Item::Import(imp) => {
+                self.run_import(imp)?;
+                Ok(Value::None)
+            }
             Item::Statement(stmt) => self.eval_statement(stmt).map(|res| match res {
                 ExecutionResult::Value(v) => v,
                 ExecutionResult::Return(v) => v, // トップレベルでのreturnは値として扱う
@@ -953,11 +959,89 @@ impl Interpreter {
                         Err("contains() key must be string".to_string())
                     }
                 }
-                _ => Err(format!("Dict has no method '{}'", method)),
+                _ => {
+                    // メソッド名がDictのキーとして存在し、かつそれが呼び出し可能であれば呼び出す
+                    let val = dict.borrow().get(method).cloned();
+                    if let Some(v) = val {
+                        self.call_function(v, args)
+                    } else {
+                        Err(format!("Dict has no method '{}'", method))
+                    }
+                }
             },
 
             _ => Err(format!("'{}' has no methods", obj.display())),
         }
+    }
+
+    /// モジュールインポートを実行
+    fn run_import(&mut self, import: &ImportStmt) -> Result<(), String> {
+        let builtins = ["fs", "json", "http", "sqlite", "base64", "math"];
+        if builtins.contains(&import.module.as_str()) {
+            return Ok(()); // ビルトインモジュールは既にロード済み
+        }
+
+        let path_str = if import.module.ends_with(".n7t") {
+            import.module.clone()
+        } else {
+            format!("{}.n7t", import.module)
+        };
+        
+        let path = Path::new(&path_str);
+        
+        // ファイル読み込み
+        let source = std::fs::read_to_string(path)
+            .map_err(|e| format!("Failed to import '{}': {}", path_str, e))?;
+            
+        // 字句解析・構文解析
+        let mut lexer = Lexer::new(&source);
+        let tokens = lexer.tokenize();
+        let mut parser = Parser::new(tokens);
+        let program = parser.parse().map_err(|e| format!("{:?}", e))?;
+        
+        // 新しいInterpreterで実行
+        let mut module_interp = Interpreter::new();
+        module_interp.run(&program)?;
+        
+        // モジュールのグローバルスコープを取得
+        // module_interp.env.borrow().values は private かもしれないが
+        // 同じモジュール内なのでアクセスできるはず
+        let module_scope = module_interp.env.borrow().values.clone();
+        
+        // 現在の環境にインポート
+        if let Some(alias) = &import.alias {
+             // import module as alias
+             // モジュール全体をDictとしてインポート
+             let mut dict = HashMap::new();
+             for (k, v) in module_scope {
+                 dict.insert(k, v);
+             }
+             self.env.borrow_mut().define(alias, Value::Dict(Rc::new(RefCell::new(dict))));
+        } else if !import.names.is_empty() {
+            // from module import A, B
+            for name in &import.names {
+                if let Some(val) = module_scope.get(name) {
+                    self.env.borrow_mut().define(name, val.clone());
+                } else {
+                    return Err(format!("'{}' not found in module '{}'", name, import.module));
+                }
+            }
+        } else {
+            // import module
+            // モジュール名をキーにしてDictを登録
+            let module_name = Path::new(&import.module)
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("module");
+                
+             let mut dict = HashMap::new();
+             for (k, v) in module_scope {
+                 dict.insert(k, v);
+             }
+             self.env.borrow_mut().define(module_name, Value::Dict(Rc::new(RefCell::new(dict))));
+        }
+        
+        Ok(())
     }
 }
 

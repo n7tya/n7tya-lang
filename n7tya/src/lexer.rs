@@ -36,7 +36,7 @@ fn process_string_escapes(s: &str) -> String {
 
 /// トークンの種類
 #[derive(Logos, Debug, Clone, PartialEq)]
-#[logos(skip r"[ ]")] // 単一のスペースはスキップ（4スペース or タブはインデントとして認識）
+#[logos(skip r"[ \r]")] // 単一のスペースとCRはスキップ（4スペース or タブはインデントとして認識）
 pub enum Token {
     // ===== キーワード =====
     #[token("def")]
@@ -248,7 +248,7 @@ impl<'a> Lexer<'a> {
     }
 
     pub fn tokenize(&mut self) -> Vec<TokenInfo> {
-        let mut tokens = Vec::new();
+        let mut tokens: Vec<TokenInfo> = Vec::new();
 
         while let Some(result) = self.inner.next() {
             let span = self.inner.span();
@@ -259,8 +259,24 @@ impl<'a> Lexer<'a> {
                 Err(_) => Token::Error,
             };
 
+            // タブ(空白)処理: 行頭以外のタブは無視する
+            if matches!(token, Token::Tab) {
+                let is_at_start_of_line = if let Some(last) = tokens.last() {
+                    matches!(last.token, Token::Newline)
+                } else {
+                    true // ファイル先頭
+                };
+
+                if !is_at_start_of_line {
+                    continue;
+                }
+            }
+
             // 改行時に行番号を更新
             if matches!(token, Token::Newline) {
+                // 連続する空行(Newline -> Newline)の場合、余分なNewlineをスキップするか、
+                // あるいはParser側で処理するか。Parserのparse_indented_blockは空行をスキップする。
+                // ここではそのまま保持。
                 tokens.push(TokenInfo {
                     token,
                     span: span.clone(),

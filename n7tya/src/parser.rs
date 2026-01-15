@@ -417,7 +417,18 @@ impl Parser {
     }
 
     fn parse_import(&mut self) -> Result<ImportStmt> {
-        let module = self.consume_identifier("Expect module name")?;
+        let module = match self.peek_token().cloned() {
+            Some(Token::Identifier(name)) => {
+                self.advance();
+                name
+            }
+            Some(Token::StringLiteral(s)) => {
+                self.advance();
+                s
+            }
+            _ => return Err(miette::miette!("Expect module name (identifier or string)")),
+        };
+
         let alias = if self.match_token(Token::As) {
             Some(self.consume_identifier("Expect alias name")?)
         } else {
@@ -432,7 +443,18 @@ impl Parser {
     }
 
     fn parse_from_import(&mut self) -> Result<ImportStmt> {
-        let module = self.consume_identifier("Expect module name")?;
+        let module = match self.peek_token().cloned() {
+            Some(Token::Identifier(name)) => {
+                self.advance();
+                name
+            }
+            Some(Token::StringLiteral(s)) => {
+                self.advance();
+                s
+            }
+            _ => return Err(miette::miette!("Expect module name (identifier or string)")),
+        };
+
         self.consume(Token::Import, "Expect 'import' after module name")?;
         let mut names = Vec::new();
         loop {

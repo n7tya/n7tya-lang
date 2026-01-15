@@ -1,7 +1,7 @@
 # 高度標準ライブラリ検証
-# import base64
-# import sqlite
-# import fs
+import base64
+import sqlite
+import fs
 
 println "=== Base64 Test ==="
 let original = "Hello, n7tya!"

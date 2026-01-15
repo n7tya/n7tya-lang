@@ -428,6 +428,27 @@ server MyApp
 
 ---
 
+## 設定ファイル (n7tya.toml)
+
+プロジェクトルートに配置される設定ファイルです。
+
+```toml
+[package]
+name = "my_project"
+version = "0.1.0"
+
+[dependencies]
+# 外部依存関係（将来的にサポート）
+
+[python]
+packages = [] # インストールするPythonパッケージ
+
+[server]
+port = 8080 # 開発サーバーのポート
+```
+
+---
+
 ## Python連携
 
 n7tya は Python ライブラリを呼び出すことができます。
