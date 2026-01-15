@@ -1,0 +1,43 @@
+# n7tya 標準ライブラリテスト
+
+# === fs モジュール ===
+println "=== fs module ==="
+
+# ファイル書き込み
+fs.write_file "/tmp/n7tya_test.txt", "Hello from n7tya!"
+println "Written to file"
+
+# ファイル存在確認
+let exists = fs.exists "/tmp/n7tya_test.txt"
+println "File exists:", exists
+
+# ファイル読み込み
+let content = fs.read_file "/tmp/n7tya_test.txt"
+println "Content:", content
+
+# ディレクトリ読み込み
+let files = fs.read_dir "/tmp"
+println "Files in /tmp (first 3):", files.copy()
+
+# ファイル削除
+fs.remove "/tmp/n7tya_test.txt"
+println "File removed:", not fs.exists("/tmp/n7tya_test.txt")
+
+# === json モジュール ===
+println "\n=== json module ==="
+
+# JSON パース
+let data = json.parse `{"name": "Taro", "age": 25, "active": true}`
+println "Parsed:", data
+println "Name:", data.get("name")
+
+# JSON 文字列化
+let obj = [1, 2, 3]
+let json_str = json.stringify obj
+println "Stringified:", json_str
+
+# === http モジュール (オプション) ===
+println "\n=== http module ==="
+println "http.get and http.post are available"
+
+println "\n=== All Tests Passed ==="

@@ -86,6 +86,24 @@ impl TypeEnv {
         global.insert("min".to_string(), any_to_int.clone());
         global.insert("max".to_string(), any_to_int.clone());
 
+        // fs モジュール
+        global.insert("fs.read_file".to_string(), any_to_str.clone());
+        global.insert("fs.write_file".to_string(), any_fn.clone());
+        global.insert("fs.exists".to_string(), any_to_bool.clone());
+        global.insert("fs.remove".to_string(), any_fn.clone());
+        global.insert("fs.read_dir".to_string(), any_to_list.clone());
+
+        // json モジュール
+        global.insert("json.parse".to_string(), TypeInfo::Fn {
+            params: vec![TypeInfo::Str],
+            ret: Box::new(TypeInfo::Unknown),
+        });
+        global.insert("json.stringify".to_string(), any_to_str.clone());
+
+        // http モジュール
+        global.insert("http.get".to_string(), any_to_str.clone());
+        global.insert("http.post".to_string(), any_to_str.clone());
+
         Self {
             scopes: vec![global],
         }
@@ -361,6 +379,19 @@ impl TypeChecker {
                 }
             }
             Expression::Call(call) => {
+                // モジュール関数チェック (fs.read_file など)
+                if let Expression::MemberAccess(m) = &call.func {
+                    if let Expression::Identifier(module_name) = &m.object {
+                        let full_name = format!("{}.{}", module_name, m.member);
+                        if let Some(ty) = self.env.lookup(&full_name) {
+                            return match ty {
+                                TypeInfo::Fn { ret, .. } => *ret,
+                                _ => TypeInfo::Unknown,
+                            };
+                        }
+                    }
+                }
+                
                 let func_ty = self.infer_expression(&call.func);
                 match func_ty {
                     TypeInfo::Fn { ret, .. } => *ret,

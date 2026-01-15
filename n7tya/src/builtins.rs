@@ -5,6 +5,7 @@
 use crate::interpreter::Value;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::fs;
 use std::io::{self, Write};
 use std::rc::Rc;
 
@@ -30,6 +31,18 @@ pub fn call_builtin(name: &str, args: Vec<Value>) -> Result<Value, String> {
         "zip" => builtin_zip(args),
         "filter" => builtin_filter(args),
         "map" => builtin_map(args),
+        // fs モジュール
+        "fs.read_file" => builtin_fs_read_file(args),
+        "fs.write_file" => builtin_fs_write_file(args),
+        "fs.exists" => builtin_fs_exists(args),
+        "fs.remove" => builtin_fs_remove(args),
+        "fs.read_dir" => builtin_fs_read_dir(args),
+        // json モジュール
+        "json.parse" => builtin_json_parse(args),
+        "json.stringify" => builtin_json_stringify(args),
+        // http モジュール
+        "http.get" => builtin_http_get(args),
+        "http.post" => builtin_http_post(args),
         _ if name.starts_with("__class_") => {
             // クラスコンストラクタ
             let class_name = name.strip_prefix("__class_").unwrap();
@@ -342,4 +355,222 @@ fn builtin_filter(_args: Vec<Value>) -> Result<Value, String> {
 fn builtin_map(_args: Vec<Value>) -> Result<Value, String> {
     // map() は高階関数なので、Interpreter 側で実装する必要がある
     Err("map() is not yet implemented as a builtin".to_string())
+}
+
+// ============================================================
+// fs モジュール - ファイルシステム操作
+// ============================================================
+
+fn builtin_fs_read_file(args: Vec<Value>) -> Result<Value, String> {
+    if args.len() != 1 {
+        return Err("fs.read_file() takes exactly 1 argument".to_string());
+    }
+    if let Value::Str(path) = &args[0] {
+        match fs::read_to_string(path) {
+            Ok(content) => Ok(Value::Str(content)),
+            Err(e) => Err(format!("Failed to read file '{}': {}", path, e)),
+        }
+    } else {
+        Err("fs.read_file() expects a string path".to_string())
+    }
+}
+
+fn builtin_fs_write_file(args: Vec<Value>) -> Result<Value, String> {
+    if args.len() != 2 {
+        return Err("fs.write_file() takes exactly 2 arguments".to_string());
+    }
+    if let (Value::Str(path), Value::Str(content)) = (&args[0], &args[1]) {
+        match fs::write(path, content) {
+            Ok(_) => Ok(Value::None),
+            Err(e) => Err(format!("Failed to write file '{}': {}", path, e)),
+        }
+    } else {
+        Err("fs.write_file() expects (path: Str, content: Str)".to_string())
+    }
+}
+
+fn builtin_fs_exists(args: Vec<Value>) -> Result<Value, String> {
+    if args.len() != 1 {
+        return Err("fs.exists() takes exactly 1 argument".to_string());
+    }
+    if let Value::Str(path) = &args[0] {
+        Ok(Value::Bool(std::path::Path::new(path).exists()))
+    } else {
+        Err("fs.exists() expects a string path".to_string())
+    }
+}
+
+fn builtin_fs_remove(args: Vec<Value>) -> Result<Value, String> {
+    if args.len() != 1 {
+        return Err("fs.remove() takes exactly 1 argument".to_string());
+    }
+    if let Value::Str(path) = &args[0] {
+        let path_obj = std::path::Path::new(path);
+        let result = if path_obj.is_dir() {
+            fs::remove_dir_all(path)
+        } else {
+            fs::remove_file(path)
+        };
+        match result {
+            Ok(_) => Ok(Value::None),
+            Err(e) => Err(format!("Failed to remove '{}': {}", path, e)),
+        }
+    } else {
+        Err("fs.remove() expects a string path".to_string())
+    }
+}
+
+fn builtin_fs_read_dir(args: Vec<Value>) -> Result<Value, String> {
+    if args.len() != 1 {
+        return Err("fs.read_dir() takes exactly 1 argument".to_string());
+    }
+    if let Value::Str(path) = &args[0] {
+        match fs::read_dir(path) {
+            Ok(entries) => {
+                let names: Vec<Value> = entries
+                    .filter_map(|e| e.ok())
+                    .filter_map(|e| e.file_name().into_string().ok())
+                    .map(Value::Str)
+                    .collect();
+                Ok(Value::List(Rc::new(RefCell::new(names))))
+            }
+            Err(e) => Err(format!("Failed to read directory '{}': {}", path, e)),
+        }
+    } else {
+        Err("fs.read_dir() expects a string path".to_string())
+    }
+}
+
+// ============================================================
+// json モジュール - JSON操作
+// ============================================================
+
+fn json_to_value(json: serde_json::Value) -> Value {
+    match json {
+        serde_json::Value::Null => Value::None,
+        serde_json::Value::Bool(b) => Value::Bool(b),
+        serde_json::Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                Value::Int(i)
+            } else if let Some(f) = n.as_f64() {
+                Value::Float(f)
+            } else {
+                Value::None
+            }
+        }
+        serde_json::Value::String(s) => Value::Str(s),
+        serde_json::Value::Array(arr) => {
+            let values: Vec<Value> = arr.into_iter().map(json_to_value).collect();
+            Value::List(Rc::new(RefCell::new(values)))
+        }
+        serde_json::Value::Object(obj) => {
+            let mut map = HashMap::new();
+            for (k, v) in obj {
+                map.insert(k, json_to_value(v));
+            }
+            Value::Dict(Rc::new(RefCell::new(map)))
+        }
+    }
+}
+
+fn value_to_json(value: &Value) -> serde_json::Value {
+    match value {
+        Value::None => serde_json::Value::Null,
+        Value::Bool(b) => serde_json::Value::Bool(*b),
+        Value::Int(n) => serde_json::Value::Number((*n).into()),
+        Value::Float(f) => {
+            serde_json::Number::from_f64(*f)
+                .map(serde_json::Value::Number)
+                .unwrap_or(serde_json::Value::Null)
+        }
+        Value::Str(s) => serde_json::Value::String(s.clone()),
+        Value::List(list) => {
+            let arr: Vec<serde_json::Value> = list.borrow().iter().map(value_to_json).collect();
+            serde_json::Value::Array(arr)
+        }
+        Value::Dict(dict) => {
+            let obj: serde_json::Map<String, serde_json::Value> = dict
+                .borrow()
+                .iter()
+                .map(|(k, v)| (k.clone(), value_to_json(v)))
+                .collect();
+            serde_json::Value::Object(obj)
+        }
+        _ => serde_json::Value::Null,
+    }
+}
+
+fn builtin_json_parse(args: Vec<Value>) -> Result<Value, String> {
+    if args.len() != 1 {
+        return Err("json.parse() takes exactly 1 argument".to_string());
+    }
+    if let Value::Str(s) = &args[0] {
+        match serde_json::from_str::<serde_json::Value>(s) {
+            Ok(json) => Ok(json_to_value(json)),
+            Err(e) => Err(format!("JSON parse error: {}", e)),
+        }
+    } else {
+        Err("json.parse() expects a string".to_string())
+    }
+}
+
+fn builtin_json_stringify(args: Vec<Value>) -> Result<Value, String> {
+    if args.len() != 1 {
+        return Err("json.stringify() takes exactly 1 argument".to_string());
+    }
+    let json = value_to_json(&args[0]);
+    match serde_json::to_string(&json) {
+        Ok(s) => Ok(Value::Str(s)),
+        Err(e) => Err(format!("JSON stringify error: {}", e)),
+    }
+}
+
+// ============================================================
+// http モジュール - HTTPクライアント
+// ============================================================
+
+fn builtin_http_get(args: Vec<Value>) -> Result<Value, String> {
+    if args.len() != 1 {
+        return Err("http.get() takes exactly 1 argument".to_string());
+    }
+    if let Value::Str(url) = &args[0] {
+        match ureq::get(url).call() {
+            Ok(response) => {
+                let body = response.into_string().unwrap_or_default();
+                Ok(Value::Str(body))
+            }
+            Err(e) => Err(format!("HTTP GET error: {}", e)),
+        }
+    } else {
+        Err("http.get() expects a URL string".to_string())
+    }
+}
+
+fn builtin_http_post(args: Vec<Value>) -> Result<Value, String> {
+    if args.len() < 2 {
+        return Err("http.post() takes at least 2 arguments (url, body)".to_string());
+    }
+    if let (Value::Str(url), body) = (&args[0], &args[1]) {
+        let body_str = match body {
+            Value::Str(s) => s.clone(),
+            _ => {
+                // 自動的にJSONにシリアライズ
+                let json = value_to_json(body);
+                serde_json::to_string(&json).unwrap_or_default()
+            }
+        };
+        
+        match ureq::post(url)
+            .set("Content-Type", "application/json")
+            .send_string(&body_str)
+        {
+            Ok(response) => {
+                let body = response.into_string().unwrap_or_default();
+                Ok(Value::Str(body))
+            }
+            Err(e) => Err(format!("HTTP POST error: {}", e)),
+        }
+    } else {
+        Err("http.post() expects (url: Str, body)".to_string())
+    }
 }

@@ -139,6 +139,12 @@ impl Interpreter {
         let builtins = [
             "print", "println", "len", "range", "input", "str", "int", "float", "type", "abs",
             "min", "max", "sum", "sorted", "reversed", "enumerate", "zip",
+            // fs モジュール
+            "fs.read_file", "fs.write_file", "fs.exists", "fs.remove", "fs.read_dir",
+            // json モジュール
+            "json.parse", "json.stringify",
+            // http モジュール
+            "http.get", "http.post",
         ];
         for name in builtins {
             env.borrow_mut()
@@ -460,6 +466,21 @@ impl Interpreter {
             Expression::Call(call) => {
                 // メソッド呼び出しの特別処理
                 if let Expression::MemberAccess(member) = &call.func {
+                    // モジュール関数かどうかをチェック (fs.read_file など)
+                    if let Expression::Identifier(module_name) = &member.object {
+                        let full_name = format!("{}.{}", module_name, member.member);
+                        // ビルトイン関数として存在するかチェック
+                        let is_module_fn = matches!(self.env.borrow().get(&full_name), Some(Value::BuiltinFn(_)));
+                        if is_module_fn {
+                            let mut args = Vec::new();
+                            for arg in &call.args {
+                                args.push(self.eval_expression(arg)?);
+                            }
+                            return self.call_builtin(&full_name, args);
+                        }
+                    }
+                    
+                    // 通常のメソッド呼び出し
                     let obj = self.eval_expression(&member.object)?;
                     let method_name = &member.member;
                     let mut args = Vec::new();
